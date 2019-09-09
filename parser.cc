@@ -9,12 +9,15 @@
 #include <map>
 #include <cstring>
 #include <google/sparse_hash_map>
+#include <google/dense_hash_map>
+#include <boost/container_hash/hash.hpp>
 
 #include <sys/time.h>
 #include <sys/resource.h>
 
 using namespace std;
 using google::sparse_hash_map;
+using google::dense_hash_map;
 
 size_t memcheck() {
     rusage usage{};
@@ -62,6 +65,18 @@ uint64_t to_uint64(const string_view str) {
     return ret;
 }
 
+template <typename T>
+T influx_integer(const string_view str) {
+    if (str.back() != 'i') {
+	throw runtime_error("invalid influx integer: " + string(str));
+    }
+    const uint64_t ret_64 = to_uint64(str.substr(0, str.size() - 1));
+    if (ret_64 > numeric_limits<T>::max()) {
+	throw runtime_error("can't convert to uint32_t: " + string(str));
+    }
+    return static_cast<T>(ret_64);
+}
+
 constexpr uint8_t SERVER_COUNT = 64;
 
 uint64_t get_server_id(const vector<string_view> & fields) {
@@ -104,6 +119,15 @@ public:
 	    throw runtime_error("key " + key_str + " already exists");
 	}
 	insert({move(key_str), string(value)});
+    }
+
+    const string & get(const string & key) const {
+	const auto ref = find(key);
+	if (ref == end()) {
+	    throw runtime_error("key " + key + " not found");
+	}
+
+	return ref->second;
     }
 };
 
@@ -165,6 +189,7 @@ void parse() {
 	try {
 	    if ( measurement == "client_buffer" ) {
 		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp]["ts"] = to_string(timestamp);
 	    } else if ( measurement == "active_streams" ) {
 		// skip
 	    } else if ( measurement == "backlog" ) {
@@ -182,9 +207,9 @@ void parse() {
 	    } else if ( measurement == "ssim" ) {
 		// skip
 	    } else if ( measurement == "video_acked" ) {
-		video_acked[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+		//		video_acked[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
 	    } else if ( measurement == "video_sent" ) {
-		video_sent[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+		//		video_sent[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
 	    } else if ( measurement == "video_size" ) {
 		// skip
 	    } else {
@@ -194,6 +219,33 @@ void parse() {
 	    cerr << "Failure on line: " << line << "\n";
 	    throw;
 	}
+    }
+
+    using session_key = tuple<uint32_t, string, uint8_t, uint16_t>;
+    /*                        init_id,  user,   server,  expt_id */
+    dense_hash_map<session_key, vector<const tag_table*>, boost::hash<session_key>> sessions;
+    sessions.set_empty_key({0,{},0,0});
+
+    for (unsigned int server = 0; server < SERVER_COUNT; server++) {
+	const size_t rss = memcheck() / 1024;
+	cerr << "server " << server << ", RSS=" << rss << " MiB\n";
+	for (const auto & [ts,tags] : client_buffer[server]) {
+	    /* get init_id */
+	    const uint32_t init_id = influx_integer<uint32_t>(tags.get("init_id"));
+
+	    /* get username */
+	    string username = tags.get("user");
+	    username = username.substr(1, username.size() - 2);
+
+	    /* get expt_id */
+	    const uint16_t expt_id = influx_integer<uint16_t>(tags.get("expt_id"));
+
+	    sessions[{init_id, username, server, expt_id}].emplace_back(&tags);
+	}
+    }
+
+    for ( const auto & [session_key, events] : sessions ) {
+	cout << "Session: " << string(get<1>(session_key)) << "\n";
     }
 }
 
