@@ -10,7 +10,6 @@ AC_CONFIG_HEADERS([config.h])
 CXX17_FLAGS="-std=c++17"
 PICKY_CXXFLAGS="-Wpedantic -Wall -Wextra -Weffc++ -Werror"
 AC_SUBST([CXX17_FLAGS])
-AC_SUBST([OPT_CXXFLAGS])
 AC_SUBST([PICKY_CXXFLAGS])
 
 # Change default CXXflags
@@ -21,8 +20,16 @@ AC_PROG_CXX
 AC_PROG_RANLIB
 
 # Checks for libraries.
+PKG_CHECK_MODULES([jemalloc],[jemalloc])
 
 # Checks for header files.
+AC_LANG_PUSH(C++)
+save_CPPFLAGS="$CPPFLAGS"
+CPPFLAGS="$CXX17_FLAGS"
+AC_CHECK_HEADERS([google/dense_hash_map], [], [AC_MSG_ERROR([Missing required header file.])])
+AC_CHECK_HEADERS([google/sparse_hash_map], [], [AC_MSG_ERROR([Missing required header file.])])
+CPPFLAGS="$save_CPPFLAGS"
+AC_LANG_POP(C++)
 
 # Checks for typedefs, structures, and compiler characteristics.
 
