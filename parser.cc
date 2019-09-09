@@ -33,8 +33,8 @@ size_t memcheck() {
     return usage.ru_maxrss;
 }
 
-vector<string_view> split_on_char(const string_view str, const char ch_to_find) {
-    vector<string_view> ret;
+void split_on_char(const string_view str, const char ch_to_find, vector<string_view> & ret) {
+    ret.clear();
 
     bool in_double_quoted_string = false;
     unsigned int field_start = 0;
@@ -45,14 +45,12 @@ vector<string_view> split_on_char(const string_view str, const char ch_to_find) 
 	} else if (in_double_quoted_string) {
 	    continue;
 	} else if (ch == ch_to_find) {
-	    ret.push_back(str.substr(field_start, i - field_start));
+	    ret.emplace_back(str.substr(field_start, i - field_start));
 	    field_start = i + 1;
 	}
     }
 
-    ret.push_back(str.substr(field_start));
-
-    return ret;
+    ret.emplace_back(str.substr(field_start));
 }
 
 uint64_t to_uint64(const string_view str) {
@@ -141,6 +139,8 @@ void parse() {
 
     unsigned int line_no = 0;
 
+    vector<string_view> fields, measurement_tag_set_fields, field_key_value;
+
     while (cin.good()) {
 	if (line_no % 1000000 == 0) {
 	    const size_t rss = memcheck() / 1024;
@@ -160,7 +160,7 @@ void parse() {
 	    throw runtime_error("Line " + to_string(line_no) + " too long");
 	}
 
-	const vector<string_view> fields = split_on_char(line, ' ');
+	split_on_char(line, ' ', fields);
 	if (fields.size() != 3) {
 	    if (not line.compare(0, 15, "CREATE DATABASE")) {
 		continue;
@@ -173,13 +173,13 @@ void parse() {
 
 	const uint64_t timestamp{to_uint64(timestamp_str)};
 
-	const auto measurement_tag_set_fields = split_on_char(measurement_tag_set, ',');
+	split_on_char(measurement_tag_set, ',', measurement_tag_set_fields);
 	if (measurement_tag_set_fields.empty()) {
 	    throw runtime_error("No measurement field on line " + to_string(line_no));
 	}
 	const auto measurement = measurement_tag_set_fields[0];
 
-	const auto field_key_value = split_on_char(field_set, '=');
+	split_on_char(field_set, '=', field_key_value);
 	if (field_key_value.size() != 2) {
 	    throw runtime_error("Irregular number of fields in field set: " + string(line));
 	}
