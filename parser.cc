@@ -63,6 +63,20 @@ uint64_t to_uint64(const string_view str) {
     return ret;
 }
 
+float to_float(const string_view str) {
+    /* sadly, g++ 8 doesn't seem to have floating-point C++17 from_chars() yet
+    float ret;
+    const auto [ptr, ignore] = from_chars(str.data(), str.data() + str.size(), ret);
+    if (ptr != str.data() + str.size()) {
+	throw runtime_error("could not parse as float: " + string(str));
+    }
+
+    return ret;
+    */
+
+    return stof(string(str));
+}
+
 template <typename T>
 T influx_integer(const string_view str) {
     if (str.back() != 'i') {
@@ -108,34 +122,120 @@ string get_channel(const vector<string_view> & fields) {
     return channel;
 }
 
+class username_table {
+    uint32_t next_id_ = 0;
 
-class tag_table : public sparse_hash_map<string, string> {
+    dense_hash_map<string, uint32_t> forward_{};
+    dense_hash_map<uint32_t, string> reverse_{};
+
 public:
-    void insert_unique(string_view key, string_view value) {
-	string key_str(key);
-	if (find(key_str) != end()) {
-	    throw runtime_error("key " + key_str + " already exists");
-	}
-	insert({move(key_str), string(value)});
+    username_table() {
+	forward_.set_empty_key({});
+	reverse_.set_empty_key(-1);
     }
 
-    const string & get(const string & key) const {
-	const auto ref = find(key);
-	if (ref == end()) {
-	    throw runtime_error("key " + key + " not found");
+    uint32_t forward_map_vivify(const string & name) {
+	auto ref = forward_.find(name);
+	if (ref == forward_.end()) {	
+	    forward_[name] = next_id_;
+	    reverse_[next_id_] = name;
+	    next_id_++;
+	    ref = forward_.find(name);
 	}
+	return ref->second;
+    }
 
+    uint32_t forward_map(const string & name) const {
+	auto ref = forward_.find(name);
+	if (ref == forward_.end()) {	
+	    throw runtime_error( "username " + name + " not found");
+	}
+	return ref->second;
+    }
+
+    const string & reverse_map(const uint32_t id) const {
+	auto ref = reverse_.find(id);
+	if (ref == reverse_.end()) {
+	    throw runtime_error( "uid " + to_string(id) + " not found");
+	}
 	return ref->second;
     }
 };
 
-using key_table = map<uint64_t, tag_table>;
+struct Event {
+    struct EventType {
+	enum class Type : uint8_t { init, startup, play, timer, rebuffer };
+	Type type;
+
+	EventType(const string_view sv)
+	    : type()
+	{
+	    if (sv == "init") { type = Type::init; }
+	    if (sv == "startup") { type = Type::startup; }
+	    if (sv == "play") { type = Type::play; }
+	    if (sv == "timer") { type = Type::timer; }
+	    if (sv == "rebuffer") { type = Type::rebuffer; }
+	}
+
+	operator uint8_t() const { return static_cast<uint8_t>(type); }
+
+	bool operator==(const EventType other) { return type == other.type; }
+	bool operator!=(const EventType other) { return not operator==(other); }
+    };
+
+    optional<uint32_t> init_id{};
+    optional<uint32_t> expt_id{};
+    optional<uint32_t> user_id{};
+    optional<EventType> type{};
+    optional<float> buffer{};
+    optional<float> cum_rebuf{};
+
+    bool complete() const {
+	return init_id.has_value() and expt_id.has_value() and user_id.has_value()
+	    and type.has_value() and buffer.has_value() and cum_rebuf.has_value();
+    }
+
+    template <typename T>
+    void set_unique( optional<T> & field, const T & value ) {
+	if (not field.has_value()) {
+	    field.emplace(value);
+	} else {
+	    if (field.value() != value) {
+		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+	    }
+	}
+    }
+
+    void insert_unique(const string_view key, const string_view value, username_table & usernames ) {
+	if (key == "init_id") {
+	    set_unique( init_id, influx_integer<uint32_t>( value ) );
+	} else if (key == "expt_id") {
+	    set_unique( expt_id, influx_integer<uint32_t>( value ) );
+	} else if (key == "user") {
+	    if (value.size() <= 2 or value.front() != '"' or value.back() != '"') {
+		throw runtime_error("invalid username string: " + string(value));
+	    }
+	    set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
+	} else if (key == "event") {
+	    set_unique( type, { value } );
+	} else if (key == "buffer") {
+	    set_unique( buffer, to_float(value) );
+	} else if (key == "cum_rebuf") {
+	    set_unique( cum_rebuf, to_float(value) );
+	} else {
+	    throw runtime_error( "unknown key: " + string(key) );
+	}
+    }
+};
+
+using key_table = map<uint64_t, Event>;
 
 void parse() {
     ios::sync_with_stdio(false);
     string line_storage;
-    array<key_table,SERVER_COUNT> client_buffer, video_acked, video_sent;
-    key_table client_sysinfo;
+
+    username_table usernames;
+    array<key_table,SERVER_COUNT> client_buffer;
 
     unsigned int line_no = 0;
 
@@ -188,7 +288,7 @@ void parse() {
 
 	try {
 	    if ( measurement == "client_buffer" ) {
-		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value, usernames);
 	    } else if ( measurement == "active_streams" ) {
 		// skip
 	    } else if ( measurement == "backlog" ) {
@@ -198,7 +298,7 @@ void parse() {
 	    } else if ( measurement == "client_error" ) {
 		// skip
 	    } else if ( measurement == "client_sysinfo" ) {
-		client_sysinfo[timestamp].insert_unique(key, value);
+		//		client_sysinfo[timestamp].insert_unique(key, value);
 	    } else if ( measurement == "decoder_info" ) {
 		// skip
 	    } else if ( measurement == "server_info" ) {
@@ -220,31 +320,25 @@ void parse() {
 	}
     }
 
-    using session_key = tuple<uint32_t, string, uint8_t, uint16_t>;
-    /*                        init_id,  user,   server,  expt_id */
-    dense_hash_map<session_key, vector<pair<uint64_t, const tag_table*>>, boost::hash<session_key>> sessions;
-    sessions.set_empty_key({0,{},0,0});
+    using session_key = tuple<uint32_t, uint32_t, uint32_t,  uint8_t>;
+    /*                        init_id,  uid,      expt_id,   server */
+    dense_hash_map<session_key, vector<pair<uint64_t, const Event*>>, boost::hash<session_key>> sessions;
+    sessions.set_empty_key({0,0,0,0});
 
     for (unsigned int server = 0; server < SERVER_COUNT; server++) {
 	const size_t rss = memcheck() / 1024;
 	cerr << "server " << server << ", RSS=" << rss << " MiB\n";
-	for (const auto & [ts,tags] : client_buffer[server]) {
-	    /* get init_id */
-	    const uint32_t init_id = influx_integer<uint32_t>(tags.get("init_id"));
+	for (const auto & [ts,event] : client_buffer[server]) {
+	    if (not event.complete()) {
+		throw runtime_error("incomplete event with timestamp " + to_string(ts));
+	    }
 
-	    /* get username */
-	    string username = tags.get("user");
-	    username = username.substr(1, username.size() - 2);
-
-	    /* get expt_id */
-	    const uint16_t expt_id = influx_integer<uint16_t>(tags.get("expt_id"));
-
-	    sessions[{init_id, username, server, expt_id}].emplace_back(ts, &tags);
+	    sessions[{*event.init_id, *event.user_id, *event.expt_id, server}].emplace_back(ts, &event);
 	}
     }
 
     for ( const auto & [session_key, events] : sessions ) {
-	cout << "Session: " << string(get<1>(session_key)) << " lasted " << (events.back().first - events.front().first) / 1000000000 << " seconds\n";
+	cout << "Session: " << usernames.reverse_map(get<1>(session_key)) << " lasted " << (events.back().first - events.front().first) / 1000000000 << " seconds\n";
     }
 }
 
