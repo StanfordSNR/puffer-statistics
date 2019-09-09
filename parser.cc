@@ -4,6 +4,9 @@
 #include <vector>
 #include <string>
 #include <array>
+#include <tuple>
+
+#include <google/sparse_hash_map>
 
 using namespace std;
 
@@ -56,14 +59,23 @@ void parse() {
 	}
 
 	if (line.size() > std::numeric_limits<uint8_t>::max()) {
-	    throw runtime_error("line too long: " + to_string(line.size()) + " bytes");
+	    throw runtime_error("Line " + to_string(line_no) + " too long");
 	}
 
-	auto fields = split_on_char(line, ' ');
-
+	vector<string_view> fields = split_on_char(line, ' ');
 	if (fields.size() != 3) {
-	    throw runtime_error("Can't parse line " + to_string(line_no) + ": " + string(line));
+	    throw runtime_error("Too many fields in line " + to_string(line_no));
 	}
+
+	auto [measurement_tag_set, field_set, timestamp] = tie(fields[0], fields[1], fields[2]);
+
+	vector<string_view> measurement_tag_set_fields = split_on_char(measurement_tag_set, ',');
+
+	if (measurement_tag_set_fields.empty()) {
+	    throw runtime_error("No measurement field on line " + to_string(line_no));
+	}
+
+	//	auto measurement = measurement_tag_set_fields[0];
     }
 }
 
