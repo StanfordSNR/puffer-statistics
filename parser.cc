@@ -75,7 +75,16 @@ float to_float(const string_view str) {
     return ret;
     */
 
-    return stof(string(str));
+    /* apologies for this */
+    char * const null_byte = const_cast<char *>(str.data() + str.size());
+    char old_value = *null_byte;
+    *null_byte = 0;
+
+    const float ret = atof(str.data());
+
+    *null_byte = old_value;
+
+    return ret;
 }
 
 template <typename T>
