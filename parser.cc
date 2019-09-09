@@ -67,17 +67,7 @@ void parse() {
 
 	const string_view line{line_storage};
 
-	if (line.empty()) {
-	    continue;
-	}
-
-	if (line.front() == '#') {
-	    continue;
-	}
-
-	const string create = "CREATE DATABASE";
-
-	if (not line.compare(0, 15, create)) {
+	if (line.empty() or line.front() == '#') {
 	    continue;
 	}
 
@@ -87,6 +77,10 @@ void parse() {
 
 	const vector<string_view> fields = split_on_char(line, ' ');
 	if (fields.size() != 3) {
+	    if (not line.compare(0, 15, "CREATE DATABASE")) {
+		continue;
+	    }
+
 	    throw runtime_error("Too many fields in line " + to_string(line_no));
 	}
 
@@ -94,13 +88,13 @@ void parse() {
 
 	const uint64_t timestamp{to_uint64(timestamp_str)};
 
-	vector<string_view> measurement_tag_set_fields = split_on_char(measurement_tag_set, ',');
+	const auto measurement_tag_set_fields = split_on_char(measurement_tag_set, ',');
 
 	if (measurement_tag_set_fields.empty()) {
 	    throw runtime_error("No measurement field on line " + to_string(line_no));
 	}
 
-	auto measurement = measurement_tag_set_fields[0];
+	const auto measurement = measurement_tag_set_fields[0];
 
 	if ( measurement == "client_buffer" ) {
 	    client_buffer[timestamp].push_back(string(field_set));
