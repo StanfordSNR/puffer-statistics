@@ -6,11 +6,9 @@
 #include <array>
 #include <tuple>
 #include <charconv>
-
-#include <google/dense_hash_map>
+#include <map>
 
 using namespace std;
-using google::dense_hash_map;
 
 vector<string_view> split_on_char(const string_view str, const char ch_to_find) {
     vector<string_view> ret;
@@ -44,22 +42,38 @@ uint64_t to_uint64(const string_view str) {
     return ret;
 }
 
-class key_table : public dense_hash_map<uint64_t, vector<string>> {
-public:
-    key_table() { set_empty_key(0); }
-};
+constexpr uint8_t SERVER_COUNT = 64;
+
+uint64_t get_server_id(const vector<string_view> & fields) {
+    uint64_t server_id = -1;
+    for (const auto & field : fields) {
+	if (not field.compare(0, 10, "server_id=")) {
+	    server_id = to_uint64(field.substr(10)) - 1;
+	}
+    }
+
+    if (server_id >= SERVER_COUNT) {
+	for ( const auto & x : fields ) { cerr << "field=" << x << " "; };
+	throw runtime_error( "Invalid or missing server id" );
+    }
+
+    return server_id;
+}
+
+using key_table = map<uint64_t, vector<string>>;
 
 void parse() {
     ios::sync_with_stdio(false);
     string line_storage;
-    key_table client_buffer, active_streams, backlog, channel_status, client_error, client_sysinfo,
+    array<key_table,SERVER_COUNT> client_buffer;
+    key_table active_streams, backlog, channel_status, client_error, client_sysinfo,
 	decoder_info, server_info, ssim, video_acked, video_sent, video_size;
 
     unsigned int line_no = 0;
 
     while (cin.good()) {
 	if (line_no % 1000000 == 0) {
-	    cerr << "line " << line_no << "\n";
+	    cerr << "line " << line_no / 1000000 << "M\n";
 	}
 
 	getline(cin, line_storage);
@@ -97,7 +111,7 @@ void parse() {
 	const auto measurement = measurement_tag_set_fields[0];
 
 	if ( measurement == "client_buffer" ) {
-	    client_buffer[timestamp].push_back(string(field_set));
+	    client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].push_back(string(field_set));
 	} else if ( measurement == "active_streams" ) {
 	    active_streams[timestamp].push_back(string(field_set));
 	} else if ( measurement == "backlog" ) {
@@ -122,6 +136,16 @@ void parse() {
 	    video_size[timestamp].push_back(string(field_set));
 	} else {
 	    throw runtime_error( "Can't parse: " + string(line) );
+	}
+    }
+
+    for (unsigned int server_no = 0; server_no < SERVER_COUNT; server_no++) {
+	for (const auto & record : client_buffer[server_no]) {
+	    cout << "server=" << server_no << " ts=" << record.first << ":";
+	    for (const auto & field : record.second) {
+		cout << " " << field;
+	    }
+	    cout << "\n";
 	}
     }
 }
