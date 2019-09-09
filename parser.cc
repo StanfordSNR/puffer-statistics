@@ -44,11 +44,16 @@ uint64_t to_uint64(const string_view str) {
     return ret;
 }
 
+class key_table : public dense_hash_map<uint64_t, vector<string>> {
+public:
+    key_table() { set_empty_key(0); }
+};
+
 void parse() {
-    std::ios::sync_with_stdio(false);
+    ios::sync_with_stdio(false);
     string line_storage;
-    dense_hash_map<uint64_t, vector<string>> client_buffer_events;
-    client_buffer_events.set_empty_key(0);
+    key_table client_buffer, active_streams, backlog, channel_status, client_error, client_sysinfo,
+	decoder_info, server_info, ssim, video_acked, video_sent, video_size;
 
     unsigned int line_no = 0;
 
@@ -76,7 +81,7 @@ void parse() {
 	    continue;
 	}
 
-	if (line.size() > std::numeric_limits<uint8_t>::max()) {
+	if (line.size() > numeric_limits<uint8_t>::max()) {
 	    throw runtime_error("Line " + to_string(line_no) + " too long");
 	}
 
@@ -98,7 +103,31 @@ void parse() {
 	auto measurement = measurement_tag_set_fields[0];
 
 	if ( measurement == "client_buffer" ) {
-	    client_buffer_events[timestamp].push_back(string(field_set));
+	    client_buffer[timestamp].push_back(string(field_set));
+	} else if ( measurement == "active_streams" ) {
+	    active_streams[timestamp].push_back(string(field_set));
+	} else if ( measurement == "backlog" ) {
+	    backlog[timestamp].push_back(string(field_set));
+	} else if ( measurement == "channel_status" ) {
+	    channel_status[timestamp].push_back(string(field_set));
+	} else if ( measurement == "client_error" ) {
+	    client_error[timestamp].push_back(string(field_set));
+	} else if ( measurement == "client_sysinfo" ) {
+	    client_sysinfo[timestamp].push_back(string(field_set));
+	} else if ( measurement == "decoder_info" ) {
+	    decoder_info[timestamp].push_back(string(field_set));
+	} else if ( measurement == "server_info" ) {
+	    server_info[timestamp].push_back(string(field_set));
+	} else if ( measurement == "ssim" ) {
+	    ssim[timestamp].push_back(string(field_set));
+	} else if ( measurement == "video_acked" ) {
+	    video_acked[timestamp].push_back(string(field_set));
+	} else if ( measurement == "video_sent" ) {
+	    video_sent[timestamp].push_back(string(field_set));
+	} else if ( measurement == "video_size" ) {
+	    video_size[timestamp].push_back(string(field_set));
+	} else {
+	    throw runtime_error( "Can't parse: " + string(line) );
 	}
     }
 }
