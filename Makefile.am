@@ -1,0 +1,6 @@
+AM_CPPFLAGS = $(CXX17_FLAGS)
+AM_CXXFLAGS = $(PICKY_CXXFLAGS)
+
+bin_PROGRAMS = parser
+
+parser_SOURCES = parser.cc
