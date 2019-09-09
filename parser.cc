@@ -16,6 +16,7 @@
 #include <sys/resource.h>
 
 using namespace std;
+using namespace std::literals;
 using google::sparse_hash_map;
 using google::dense_hash_map;
 
@@ -94,7 +95,7 @@ constexpr uint8_t SERVER_COUNT = 64;
 uint64_t get_server_id(const vector<string_view> & fields) {
     uint64_t server_id = -1;
     for (const auto & field : fields) {
-	if (not field.compare(0, 10, "server_id=")) {
+	if (not field.compare(0, 10, "server_id="sv)) {
 	    server_id = to_uint64(field.substr(10)) - 1;
 	}
     }
@@ -110,7 +111,7 @@ uint64_t get_server_id(const vector<string_view> & fields) {
 string get_channel(const vector<string_view> & fields) {
     string channel;
     for (const auto & field : fields) {
-	if (not field.compare(0, 8, "channel=")) {
+	if (not field.compare(0, 8, "channel="sv)) {
 	    channel = field.substr(8);
 	}
     }
@@ -170,11 +171,11 @@ struct Event {
 	EventType(const string_view sv)
 	    : type()
 	{
-	    if (sv == "init") { type = Type::init; }
-	    if (sv == "startup") { type = Type::startup; }
-	    if (sv == "play") { type = Type::play; }
-	    if (sv == "timer") { type = Type::timer; }
-	    if (sv == "rebuffer") { type = Type::rebuffer; }
+	    if (sv == "init"sv) { type = Type::init; }
+	    if (sv == "startup"sv) { type = Type::startup; }
+	    if (sv == "play"sv) { type = Type::play; }
+	    if (sv == "timer"sv) { type = Type::timer; }
+	    if (sv == "rebuffer"sv) { type = Type::rebuffer; }
 	}
 
 	operator uint8_t() const { return static_cast<uint8_t>(type); }
@@ -207,20 +208,20 @@ struct Event {
     }
 
     void insert_unique(const string_view key, const string_view value, username_table & usernames ) {
-	if (key == "init_id") {
+	if (key == "init_id"sv) {
 	    set_unique( init_id, influx_integer<uint32_t>( value ) );
-	} else if (key == "expt_id") {
+	} else if (key == "expt_id"sv) {
 	    set_unique( expt_id, influx_integer<uint32_t>( value ) );
-	} else if (key == "user") {
+	} else if (key == "user"sv) {
 	    if (value.size() <= 2 or value.front() != '"' or value.back() != '"') {
 		throw runtime_error("invalid username string: " + string(value));
 	    }
 	    set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
-	} else if (key == "event") {
+	} else if (key == "event"sv) {
 	    set_unique( type, { value } );
-	} else if (key == "buffer") {
+	} else if (key == "buffer"sv) {
 	    set_unique( buffer, to_float(value) );
-	} else if (key == "cum_rebuf") {
+	} else if (key == "cum_rebuf"sv) {
 	    set_unique( cum_rebuf, to_float(value) );
 	} else {
 	    throw runtime_error( "unknown key: " + string(key) );
@@ -262,7 +263,7 @@ void parse() {
 
 	split_on_char(line, ' ', fields);
 	if (fields.size() != 3) {
-	    if (not line.compare(0, 15, "CREATE DATABASE")) {
+	    if (not line.compare(0, 15, "CREATE DATABASE"sv)) {
 		continue;
 	    }
 
@@ -287,29 +288,29 @@ void parse() {
 	const auto [key, value] = tie(field_key_value[0], field_key_value[1]);
 
 	try {
-	    if ( measurement == "client_buffer" ) {
+	    if ( measurement == "client_buffer"sv ) {
 		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value, usernames);
-	    } else if ( measurement == "active_streams" ) {
+	    } else if ( measurement == "active_streams"sv ) {
 		// skip
-	    } else if ( measurement == "backlog" ) {
+	    } else if ( measurement == "backlog"sv ) {
 		// skip
-	    } else if ( measurement == "channel_status" ) {
+	    } else if ( measurement == "channel_status"sv ) {
 		// skip
-	    } else if ( measurement == "client_error" ) {
+	    } else if ( measurement == "client_error"sv ) {
 		// skip
-	    } else if ( measurement == "client_sysinfo" ) {
+	    } else if ( measurement == "client_sysinfo"sv ) {
 		//		client_sysinfo[timestamp].insert_unique(key, value);
-	    } else if ( measurement == "decoder_info" ) {
+	    } else if ( measurement == "decoder_info"sv ) {
 		// skip
-	    } else if ( measurement == "server_info" ) {
+	    } else if ( measurement == "server_info"sv ) {
 		// skip
-	    } else if ( measurement == "ssim" ) {
+	    } else if ( measurement == "ssim"sv ) {
 		// skip
-	    } else if ( measurement == "video_acked" ) {
+	    } else if ( measurement == "video_acked"sv ) {
 		//		video_acked[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
-	    } else if ( measurement == "video_sent" ) {
+	    } else if ( measurement == "video_sent"sv ) {
 		//		video_sent[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
-	    } else if ( measurement == "video_size" ) {
+	    } else if ( measurement == "video_size"sv ) {
 		// skip
 	    } else {
 		throw runtime_error( "Can't parse: " + string(line) );
