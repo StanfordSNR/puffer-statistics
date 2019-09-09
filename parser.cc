@@ -189,7 +189,6 @@ void parse() {
 	try {
 	    if ( measurement == "client_buffer" ) {
 		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
-		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp]["ts"] = to_string(timestamp);
 	    } else if ( measurement == "active_streams" ) {
 		// skip
 	    } else if ( measurement == "backlog" ) {
@@ -223,7 +222,7 @@ void parse() {
 
     using session_key = tuple<uint32_t, string, uint8_t, uint16_t>;
     /*                        init_id,  user,   server,  expt_id */
-    dense_hash_map<session_key, vector<const tag_table*>, boost::hash<session_key>> sessions;
+    dense_hash_map<session_key, vector<pair<uint64_t, const tag_table*>>, boost::hash<session_key>> sessions;
     sessions.set_empty_key({0,{},0,0});
 
     for (unsigned int server = 0; server < SERVER_COUNT; server++) {
@@ -240,12 +239,12 @@ void parse() {
 	    /* get expt_id */
 	    const uint16_t expt_id = influx_integer<uint16_t>(tags.get("expt_id"));
 
-	    sessions[{init_id, username, server, expt_id}].emplace_back(&tags);
+	    sessions[{init_id, username, server, expt_id}].emplace_back(ts, &tags);
 	}
     }
 
     for ( const auto & [session_key, events] : sessions ) {
-	cout << "Session: " << string(get<1>(session_key)) << "\n";
+	cout << "Session: " << string(get<1>(session_key)) << " lasted " << (events.back().first - events.front().first) / 1000000000 << " seconds\n";
     }
 }
 
