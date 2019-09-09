@@ -7,8 +7,28 @@
 #include <tuple>
 #include <charconv>
 #include <map>
+#include <cstring>
+#include <google/sparse_hash_map>
+
+#include <sys/time.h>
+#include <sys/resource.h>
 
 using namespace std;
+using google::sparse_hash_map;
+
+size_t memcheck() {
+    rusage usage{};
+    if (getrusage(RUSAGE_SELF, &usage) < 0) {
+	perror("getrusage");
+	throw runtime_error(string("getrusage: ") + strerror(errno));
+    }
+
+    if (usage.ru_maxrss > 12 * 1024 * 1024) {
+	throw runtime_error("memory usage is at " + to_string(usage.ru_maxrss) + " KiB");
+    }
+
+    return usage.ru_maxrss;
+}
 
 vector<string_view> split_on_char(const string_view str, const char ch_to_find) {
     vector<string_view> ret;
@@ -60,20 +80,47 @@ uint64_t get_server_id(const vector<string_view> & fields) {
     return server_id;
 }
 
-using key_table = map<uint64_t, vector<string>>;
+string get_channel(const vector<string_view> & fields) {
+    string channel;
+    for (const auto & field : fields) {
+	if (not field.compare(0, 8, "channel=")) {
+	    channel = field.substr(8);
+	}
+    }
+
+    if (channel.empty()) {
+	throw runtime_error("channel missing");
+    }
+
+    return channel;
+}
+
+
+class tag_table : public sparse_hash_map<string, string> {
+public:
+    void insert_unique(string_view key, string_view value) {
+	string key_str(key);
+	if (find(key_str) != end()) {
+	    throw runtime_error("key " + key_str + " already exists");
+	}
+	insert({move(key_str), string(value)});
+    }
+};
+
+using key_table = map<uint64_t, tag_table>;
 
 void parse() {
     ios::sync_with_stdio(false);
     string line_storage;
-    array<key_table,SERVER_COUNT> client_buffer;
-    key_table active_streams, backlog, channel_status, client_error, client_sysinfo,
-	decoder_info, server_info, ssim, video_acked, video_sent, video_size;
+    array<key_table,SERVER_COUNT> client_buffer, video_acked, video_sent;
+    key_table client_sysinfo;
 
     unsigned int line_no = 0;
 
     while (cin.good()) {
 	if (line_no % 1000000 == 0) {
-	    cerr << "line " << line_no / 1000000 << "M\n";
+	    const size_t rss = memcheck() / 1024;
+	    cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n";
 	}
 
 	getline(cin, line_storage);
@@ -103,49 +150,49 @@ void parse() {
 	const uint64_t timestamp{to_uint64(timestamp_str)};
 
 	const auto measurement_tag_set_fields = split_on_char(measurement_tag_set, ',');
-
 	if (measurement_tag_set_fields.empty()) {
 	    throw runtime_error("No measurement field on line " + to_string(line_no));
 	}
-
 	const auto measurement = measurement_tag_set_fields[0];
 
-	if ( measurement == "client_buffer" ) {
-	    client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].push_back(string(field_set));
-	} else if ( measurement == "active_streams" ) {
-	    active_streams[timestamp].push_back(string(field_set));
-	} else if ( measurement == "backlog" ) {
-	    backlog[timestamp].push_back(string(field_set));
-	} else if ( measurement == "channel_status" ) {
-	    channel_status[timestamp].push_back(string(field_set));
-	} else if ( measurement == "client_error" ) {
-	    client_error[timestamp].push_back(string(field_set));
-	} else if ( measurement == "client_sysinfo" ) {
-	    client_sysinfo[timestamp].push_back(string(field_set));
-	} else if ( measurement == "decoder_info" ) {
-	    decoder_info[timestamp].push_back(string(field_set));
-	} else if ( measurement == "server_info" ) {
-	    server_info[timestamp].push_back(string(field_set));
-	} else if ( measurement == "ssim" ) {
-	    ssim[timestamp].push_back(string(field_set));
-	} else if ( measurement == "video_acked" ) {
-	    video_acked[timestamp].push_back(string(field_set));
-	} else if ( measurement == "video_sent" ) {
-	    video_sent[timestamp].push_back(string(field_set));
-	} else if ( measurement == "video_size" ) {
-	    video_size[timestamp].push_back(string(field_set));
-	} else {
-	    throw runtime_error( "Can't parse: " + string(line) );
+	const auto field_key_value = split_on_char(field_set, '=');
+	if (field_key_value.size() != 2) {
+	    throw runtime_error("Irregular number of fields in field set: " + string(line));
 	}
-    }
 
-    for (unsigned int server_no = 0; server_no < SERVER_COUNT; server_no++) {
-	for (const auto & record : client_buffer[server_no]) {
-	    cout << "server=" << server_no << " ts=" << record.first << ":";
-	    for (const auto & field : record.second) {
-		cout << " " << field;
+	const auto [key, value] = tie(field_key_value[0], field_key_value[1]);
+
+	try {
+	    if ( measurement == "client_buffer" ) {
+		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+	    } else if ( measurement == "active_streams" ) {
+		// skip
+	    } else if ( measurement == "backlog" ) {
+		// skip
+	    } else if ( measurement == "channel_status" ) {
+		// skip
+	    } else if ( measurement == "client_error" ) {
+		// skip
+	    } else if ( measurement == "client_sysinfo" ) {
+		client_sysinfo[timestamp].insert_unique(key, value);
+	    } else if ( measurement == "decoder_info" ) {
+		// skip
+	    } else if ( measurement == "server_info" ) {
+		// skip
+	    } else if ( measurement == "ssim" ) {
+		// skip
+	    } else if ( measurement == "video_acked" ) {
+		video_acked[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+	    } else if ( measurement == "video_sent" ) {
+		video_sent[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+	    } else if ( measurement == "video_size" ) {
+		// skip
+	    } else {
+		throw runtime_error( "Can't parse: " + string(line) );
 	    }
-	    cout << "\n";
+	} catch (const exception & e ) {
+	    cerr << "Failure on line: " << line << "\n";
+	    throw;
 	}
     }
 }
