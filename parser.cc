@@ -5,10 +5,12 @@
 #include <string>
 #include <array>
 #include <tuple>
+#include <charconv>
 
-#include <google/sparse_hash_map>
+#include <google/dense_hash_map>
 
 using namespace std;
+using google::dense_hash_map;
 
 vector<string_view> split_on_char(const string_view str, const char ch_to_find) {
     vector<string_view> ret;
@@ -32,13 +34,29 @@ vector<string_view> split_on_char(const string_view str, const char ch_to_find) 
     return ret;
 }
 
+uint64_t to_uint64(const string_view str) {
+    uint64_t ret = -1;
+    const auto [ptr, ignore] = from_chars(str.data(), str.data() + str.size(), ret);
+    if (ptr != str.data() + str.size()) {
+	throw runtime_error("could not parse as integer: " + string(str));
+    }
+
+    return ret;
+}
+
 void parse() {
     std::ios::sync_with_stdio(false);
     string line_storage;
+    dense_hash_map<uint64_t, vector<string>> client_buffer_events;
+    client_buffer_events.set_empty_key(0);
 
     unsigned int line_no = 0;
 
     while (cin.good()) {
+	if (line_no % 1000000 == 0) {
+	    cerr << "line " << line_no << "\n";
+	}
+
 	getline(cin, line_storage);
 	line_no++;
 
@@ -62,12 +80,14 @@ void parse() {
 	    throw runtime_error("Line " + to_string(line_no) + " too long");
 	}
 
-	vector<string_view> fields = split_on_char(line, ' ');
+	const vector<string_view> fields = split_on_char(line, ' ');
 	if (fields.size() != 3) {
 	    throw runtime_error("Too many fields in line " + to_string(line_no));
 	}
 
-	auto [measurement_tag_set, field_set, timestamp] = tie(fields[0], fields[1], fields[2]);
+	const auto [measurement_tag_set, field_set, timestamp_str] = tie(fields[0], fields[1], fields[2]);
+
+	const uint64_t timestamp{to_uint64(timestamp_str)};
 
 	vector<string_view> measurement_tag_set_fields = split_on_char(measurement_tag_set, ',');
 
@@ -75,7 +95,11 @@ void parse() {
 	    throw runtime_error("No measurement field on line " + to_string(line_no));
 	}
 
-	//	auto measurement = measurement_tag_set_fields[0];
+	auto measurement = measurement_tag_set_fields[0];
+
+	if ( measurement == "client_buffer" ) {
+	    client_buffer_events[timestamp].push_back(string(field_set));
+	}
     }
 }
 
