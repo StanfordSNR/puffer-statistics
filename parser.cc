@@ -54,10 +54,14 @@ void split_on_char(const string_view str, const char ch_to_find, vector<string_v
     ret.emplace_back(str.substr(field_start));
 }
 
-uint64_t to_uint64(const string_view str) {
+uint64_t to_uint64(string_view str) {
     uint64_t ret = -1;
     const auto [ptr, ignore] = from_chars(str.data(), str.data() + str.size(), ret);
     if (ptr != str.data() + str.size()) {
+	str.remove_prefix(ptr - str.data());
+	if (str == "complete."sv) { /* influx_inspect puts this at the very end */
+	    return ret;
+	}
 	throw runtime_error("could not parse as integer: " + string(str));
     }
 
