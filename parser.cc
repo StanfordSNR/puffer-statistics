@@ -187,6 +187,8 @@ struct Event {
     optional<float> buffer{};
     optional<float> cum_rebuf{};
 
+    bool bad = false;
+
     bool complete() const {
 	return init_id.has_value() and expt_id.has_value() and user_id.has_value()
 	    and type.has_value() and buffer.has_value() and cum_rebuf.has_value();
@@ -206,6 +208,7 @@ struct Event {
 		     << ", buffer=" << buffer.value_or(-1.0)
 		     << ", cum_rebuf=" << cum_rebuf.value_or(-1.0)
 		     << "\n";
+		bad = true;
 		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
 	    }
 	}
@@ -371,11 +374,18 @@ void parse() {
     dense_hash_map<session_key, vector<pair<uint64_t, const Event*>>, boost::hash<session_key>> sessions;
     sessions.set_empty_key({0,0,0,-1,-1});
 
+    unsigned int bad_count = 0;
+
     for (uint8_t server = 0; server < client_buffer.size(); server++) {
 	const size_t rss = memcheck() / 1024;
 	cerr << "server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
 	for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
 	    for (const auto & [ts,event] : client_buffer[server][channel]) {
+		if (event.bad) {
+		    bad_count++;
+		    cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
+		    continue;
+		}
 		if (not event.complete()) {
 		    throw runtime_error("incomplete event with timestamp " + to_string(ts));
 		}
@@ -401,6 +411,7 @@ void parse() {
     cout << "Overall: " << total_time / double(3600) << " hours played, " << 100 * stalled_time / total_time << "% stalled.\n";
     cout << "Out of " << sessions.size() << " sessions, " << had_stall << " had a stall, or " << 100.0 * had_stall / double(sessions.size()) << "%.\n";
     cout << "Memory usage is " << memcheck() / 1024 << " MiB.\n";
+    cout << "Bad data points: " << bad_count << "\n";
 }
 
 int main() {
