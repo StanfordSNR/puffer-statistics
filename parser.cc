@@ -200,15 +200,17 @@ struct Event {
 	    field.emplace(value);
 	} else {
 	    if (field.value() != value) {
-		cerr << "error trying to set contradictory value: ";
-		cerr << "init_id=" << init_id.value_or(-1)
-		     << ", expt_id=" << expt_id.value_or(-1)
-		     << ", user_id=" << user_id.value_or(-1)
-		     << ", type=" << (type.has_value() ? char(uint8_t(type.value())) : 'x')
-		     << ", buffer=" << buffer.value_or(-1.0)
-		     << ", cum_rebuf=" << cum_rebuf.value_or(-1.0)
-		     << "\n";
-		bad = true;
+		if (not bad) {
+		    bad = true;
+		    cerr << "error trying to set contradictory value: ";
+		    cerr << "init_id=" << init_id.value_or(-1)
+			 << ", expt_id=" << expt_id.value_or(-1)
+			 << ", user_id=" << user_id.value_or(-1)
+			 << ", type=" << (type.has_value() ? char(uint8_t(type.value())) : 'x')
+			 << ", buffer=" << buffer.value_or(-1.0)
+			 << ", cum_rebuf=" << cum_rebuf.value_or(-1.0)
+			 << "\n";
+		}
 		//		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
 	    }
 	}
