@@ -276,6 +276,10 @@ void parse() {
 		continue;
 	    }
 
+	    if (not line.compare(0, 15, "writing out tsm"sv)) {
+		continue;
+	    }
+
 	    throw runtime_error("Too many fields in line " + to_string(line_no));
 	}
 
