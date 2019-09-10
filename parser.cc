@@ -209,7 +209,7 @@ struct Event {
 		     << ", cum_rebuf=" << cum_rebuf.value_or(-1.0)
 		     << "\n";
 		bad = true;
-		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+		//		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
 	    }
 	}
     }
