@@ -59,9 +59,6 @@ uint64_t to_uint64(string_view str) {
     const auto [ptr, ignore] = from_chars(str.data(), str.data() + str.size(), ret);
     if (ptr != str.data() + str.size()) {
 	str.remove_prefix(ptr - str.data());
-	if (str == "complete."sv) { /* influx_inspect puts this at the very end */
-	    return ret;
-	}
 	throw runtime_error("could not parse as integer: " + string(str));
     }
 
@@ -277,10 +274,6 @@ void parse() {
 	split_on_char(line, ' ', fields);
 	if (fields.size() != 3) {
 	    if (not line.compare(0, 15, "CREATE DATABASE"sv)) {
-		continue;
-	    }
-
-	    if (not line.compare(0, 15, "writing out tsm"sv)) {
 		continue;
 	    }
 
