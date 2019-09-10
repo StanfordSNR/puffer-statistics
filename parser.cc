@@ -284,7 +284,7 @@ void parse() {
 		continue;
 	    }
 
-	    throw runtime_error("Too many fields in line " + to_string(line_no));
+	    throw runtime_error("Too many fields in line: " + string(line));
 	}
 
 	const auto [measurement_tag_set, field_set, timestamp_str] = tie(fields[0], fields[1], fields[2]);
