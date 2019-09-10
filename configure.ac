@@ -21,6 +21,7 @@ AC_PROG_RANLIB
 
 # Checks for libraries.
 PKG_CHECK_MODULES([jemalloc],[jemalloc])
+PKG_CHECK_MODULES([jsoncpp], [jsoncpp])
 
 # Checks for header files.
 AC_LANG_PUSH(C++)
