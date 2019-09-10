@@ -356,9 +356,22 @@ void parse() {
 	}
     }
 
+    double total_time = 0;
+    double stalled_time = 0;
+    unsigned int had_stall = 0;
+
     for ( const auto & [session_key, events] : sessions ) {
-	cout << "Session: " << usernames.reverse_map(get<1>(session_key)) << " lasted " << (events.back().first - events.front().first) / 1000000000 << " seconds\n";
+	cout << "Session: " << usernames.reverse_map(get<1>(session_key)) << " lasted " << (events.back().first - events.front().first) / double(1000000000) << " seconds and spent " << events.back().second->cum_rebuf.value() << " seconds stalled\n";
+	total_time += (events.back().first - events.front().first) / double(1000000000);
+	stalled_time += events.back().second->cum_rebuf.value();
+	if (events.back().second->cum_rebuf.value() > 0) {
+	    had_stall++;
+	}
     }
+
+    cout << "Overall: " << total_time / double(3600) << " hours played, " << 100 * stalled_time / total_time << "% stalled.\n";
+    cout << "Out of " << sessions.size() << " sessions, " << had_stall << " had a stall, or " << 100.0 * had_stall / double(sessions.size()) << "%.\n";
+    cout << "Memory usage is " << memcheck() / 1024 << " MiB.\n";
 }
 
 int main() {
