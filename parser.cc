@@ -118,21 +118,6 @@ uint64_t get_server_id(const vector<string_view> & fields) {
     return server_id;
 }
 
-string get_channel(const vector<string_view> & fields) {
-    string channel;
-    for (const auto & field : fields) {
-	if (not field.compare(0, 8, "channel="sv)) {
-	    channel = field.substr(8);
-	}
-    }
-
-    if (channel.empty()) {
-	throw runtime_error("channel missing");
-    }
-
-    return channel;
-}
-
 class username_table {
     uint32_t next_id_ = 0;
 
@@ -181,11 +166,12 @@ struct Event {
 	EventType(const string_view sv)
 	    : type()
 	{
-	    if (sv == "init"sv) { type = Type::init; }
-	    if (sv == "startup"sv) { type = Type::startup; }
-	    if (sv == "play"sv) { type = Type::play; }
 	    if (sv == "timer"sv) { type = Type::timer; }
-	    if (sv == "rebuffer"sv) { type = Type::rebuffer; }
+	    else if (sv == "play"sv) { type = Type::play; }
+	    else if (sv == "rebuffer"sv) { type = Type::rebuffer; }
+	    else if (sv == "init"sv) { type = Type::init; }
+	    else if (sv == "startup"sv) { type = Type::startup; }
+	    else { throw runtime_error( "unknown event type: " + string(sv) ); }
 	}
 
 	operator uint8_t() const { return static_cast<uint8_t>(type); }
@@ -236,7 +222,7 @@ struct Event {
 	    }
 	    set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
 	} else if (key == "event"sv) {
-	    set_unique( type, { value } );
+	    set_unique( type, { value.substr(1,value.size()-2) } );
 	} else if (key == "buffer"sv) {
 	    set_unique( buffer, to_float(value) );
 	} else if (key == "cum_rebuf"sv) {
@@ -249,12 +235,52 @@ struct Event {
 
 using key_table = map<uint64_t, Event>;
 
+struct Channel {
+    constexpr static uint8_t COUNT = 6;
+
+    enum class ID : uint8_t { cbs, nbc, abc, fox, univision, pbs };
+
+    constexpr static array<string_view, COUNT> names = { "cbs", "nbc", "abc", "fox", "univision", "pbs" };
+
+    ID id;
+
+    constexpr Channel(const string_view sv)
+	: id()
+    {
+	if (sv == "cbs"sv) { id = ID::cbs; }
+	else if (sv == "nbc"sv) { id = ID::nbc; }
+	else if (sv == "abc"sv) { id = ID::abc; }
+	else if (sv == "fox"sv) { id = ID::fox; }
+	else if (sv == "univision"sv) { id = ID::univision; }
+	else if (sv == "pbs"sv) { id = ID::pbs; }
+	else { throw runtime_error( "unknown channel: " + string(sv) ); }
+    }
+
+    constexpr Channel(const uint8_t id_int) : id(static_cast<ID>(id_int)) {}
+
+    operator string_view() const { return names[uint8_t(id)]; }
+    constexpr operator uint8_t() const { return static_cast<uint8_t>(id); }
+
+    bool operator==(const Channel other) { return id == other.id; }
+    bool operator!=(const Channel other) { return not operator==(other); }
+};
+
+Channel get_channel(const vector<string_view> & fields) {
+    for (const auto & field : fields) {
+	if (not field.compare(0, 8, "channel="sv)) {
+	    return field.substr(8);
+	}
+    }
+
+    throw runtime_error("channel missing");
+}
+
 void parse() {
     ios::sync_with_stdio(false);
     string line_storage;
 
     username_table usernames;
-    array<key_table,SERVER_COUNT> client_buffer;
+    array<array<key_table, Channel::COUNT>, SERVER_COUNT> client_buffer;
 
     unsigned int line_no = 0;
 
@@ -308,7 +334,7 @@ void parse() {
 
 	try {
 	    if ( measurement == "client_buffer"sv ) {
-		client_buffer[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value, usernames);
+		client_buffer[get_server_id(measurement_tag_set_fields)][get_channel(measurement_tag_set_fields)][timestamp].insert_unique(key, value, usernames);
 	    } else if ( measurement == "active_streams"sv ) {
 		// skip
 	    } else if ( measurement == "backlog"sv ) {
@@ -340,20 +366,22 @@ void parse() {
 	}
     }
 
-    using session_key = tuple<uint32_t, uint32_t, uint32_t,  uint8_t>;
-    /*                        init_id,  uid,      expt_id,   server */
+    using session_key = tuple<uint32_t, uint32_t, uint32_t, uint8_t, uint8_t>;
+    /*                        init_id,  uid,      expt_id,  server,  channel */
     dense_hash_map<session_key, vector<pair<uint64_t, const Event*>>, boost::hash<session_key>> sessions;
-    sessions.set_empty_key({0,0,0,0});
+    sessions.set_empty_key({0,0,0,-1,-1});
 
-    for (unsigned int server = 0; server < SERVER_COUNT; server++) {
+    for (uint8_t server = 0; server < client_buffer.size(); server++) {
 	const size_t rss = memcheck() / 1024;
-	cerr << "server " << server << ", RSS=" << rss << " MiB\n";
-	for (const auto & [ts,event] : client_buffer[server]) {
-	    if (not event.complete()) {
-		throw runtime_error("incomplete event with timestamp " + to_string(ts));
-	    }
+	cerr << "server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
+	for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
+	    for (const auto & [ts,event] : client_buffer[server][channel]) {
+		if (not event.complete()) {
+		    throw runtime_error("incomplete event with timestamp " + to_string(ts));
+		}
 
-	    sessions[{*event.init_id, *event.user_id, *event.expt_id, server}].emplace_back(ts, &event);
+		sessions[{*event.init_id, *event.user_id, *event.expt_id, server, channel}].emplace_back(ts, &event);
+	    }
 	}
     }
 
