@@ -8,9 +8,12 @@
 #include <charconv>
 #include <map>
 #include <cstring>
+#include <fstream>
 #include <google/sparse_hash_map>
 #include <google/dense_hash_map>
 #include <boost/container_hash/hash.hpp>
+
+#include <jsoncpp/json/json.h>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -161,7 +164,11 @@ public:
 struct Event {
     struct EventType {
 	enum class Type : uint8_t { init, startup, play, timer, rebuffer };
+	constexpr static array<string_view, 5> names = { "init", "startup", "play", "timer", "rebuffer" };
+
 	Type type;
+
+	operator string_view() const { return names[uint8_t(type)]; }
 
 	EventType(const string_view sv)
 	    : type()
@@ -176,8 +183,10 @@ struct Event {
 
 	operator uint8_t() const { return static_cast<uint8_t>(type); }
 
-	bool operator==(const EventType other) { return type == other.type; }
-	bool operator!=(const EventType other) { return not operator==(other); }
+	bool operator==(const EventType other) const { return type == other.type; }
+	bool operator==(const EventType::Type other) const { return type == other; }
+	bool operator!=(const EventType other) const { return not operator==(other); }
+	bool operator!=(const EventType::Type other) const { return not operator==(other); }
     };
 
     optional<uint32_t> init_id{};
@@ -280,145 +289,373 @@ Channel get_channel(const vector<string_view> & fields) {
     throw runtime_error("channel missing");
 }
 
-void parse() {
-    ios::sync_with_stdio(false);
-    string line_storage;
-
-    username_table usernames;
-    array<array<key_table, Channel::COUNT>, SERVER_COUNT> client_buffer;
-
-    unsigned int line_no = 0;
-
-    vector<string_view> fields, measurement_tag_set_fields, field_key_value;
-
-    while (cin.good()) {
-	if (line_no % 1000000 == 0) {
-	    const size_t rss = memcheck() / 1024;
-	    cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n";
-	}
-
-	getline(cin, line_storage);
-	line_no++;
-
-	const string_view line{line_storage};
-
-	if (line.empty() or line.front() == '#') {
-	    continue;
-	}
-
-	if (line.size() > numeric_limits<uint8_t>::max()) {
-	    throw runtime_error("Line " + to_string(line_no) + " too long");
-	}
-
-	split_on_char(line, ' ', fields);
-	if (fields.size() != 3) {
-	    if (not line.compare(0, 15, "CREATE DATABASE"sv)) {
-		continue;
-	    }
-
-	    cerr << "Ignoring line with wrong number of fields: " << string(line) << "\n";
-	    continue;
-	}
-
-	const auto [measurement_tag_set, field_set, timestamp_str] = tie(fields[0], fields[1], fields[2]);
-
-	const uint64_t timestamp{to_uint64(timestamp_str)};
-
-	split_on_char(measurement_tag_set, ',', measurement_tag_set_fields);
-	if (measurement_tag_set_fields.empty()) {
-	    throw runtime_error("No measurement field on line " + to_string(line_no));
-	}
-	const auto measurement = measurement_tag_set_fields[0];
-
-	split_on_char(field_set, '=', field_key_value);
-	if (field_key_value.size() != 2) {
-	    throw runtime_error("Irregular number of fields in field set: " + string(line));
-	}
-
-	const auto [key, value] = tie(field_key_value[0], field_key_value[1]);
-
-	try {
-	    if ( measurement == "client_buffer"sv ) {
-		client_buffer[get_server_id(measurement_tag_set_fields)][get_channel(measurement_tag_set_fields)][timestamp].insert_unique(key, value, usernames);
-	    } else if ( measurement == "active_streams"sv ) {
-		// skip
-	    } else if ( measurement == "backlog"sv ) {
-		// skip
-	    } else if ( measurement == "channel_status"sv ) {
-		// skip
-	    } else if ( measurement == "client_error"sv ) {
-		// skip
-	    } else if ( measurement == "client_sysinfo"sv ) {
-		//		client_sysinfo[timestamp].insert_unique(key, value);
-	    } else if ( measurement == "decoder_info"sv ) {
-		// skip
-	    } else if ( measurement == "server_info"sv ) {
-		// skip
-	    } else if ( measurement == "ssim"sv ) {
-		// skip
-	    } else if ( measurement == "video_acked"sv ) {
-		//		video_acked[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
-	    } else if ( measurement == "video_sent"sv ) {
-		//		video_sent[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
-	    } else if ( measurement == "video_size"sv ) {
-		// skip
-	    } else {
-		throw runtime_error( "Can't parse: " + string(line) );
-	    }
-	} catch (const exception & e ) {
-	    cerr << "Failure on line: " << line << "\n";
-	    throw;
-	}
-    }
+class Parser {
+private:
+    username_table usernames{};
+    array<array<key_table, Channel::COUNT>, SERVER_COUNT> client_buffer{};
 
     using session_key = tuple<uint32_t, uint32_t, uint32_t, uint8_t, uint8_t>;
     /*                        init_id,  uid,      expt_id,  server,  channel */
     dense_hash_map<session_key, vector<pair<uint64_t, const Event*>>, boost::hash<session_key>> sessions;
-    sessions.set_empty_key({0,0,0,-1,-1});
 
     unsigned int bad_count = 0;
 
-    for (uint8_t server = 0; server < client_buffer.size(); server++) {
-	const size_t rss = memcheck() / 1024;
-	cerr << "server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
-	for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
-	    for (const auto & [ts,event] : client_buffer[server][channel]) {
-		if (event.bad) {
-		    bad_count++;
-		    cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
+    vector<string> experiments{};
+
+    void read_experimental_settings_dump(const string & filename) {
+	ifstream experiment_dump{ filename };
+	if (not experiment_dump.is_open()) {
+	    throw runtime_error( "can't open " + filename );
+	}
+	
+	string line_storage;
+
+	while (true) {
+	    getline(experiment_dump, line_storage);
+	    if (not experiment_dump.good()) {
+		break;
+	    }
+
+	    const string_view line{line_storage};
+
+	    const size_t separator = line.find_first_of(' ');
+	    if (separator == line.npos) {
+		throw runtime_error("can't find separator: " + line_storage);
+	    }
+	    const uint64_t experiment_id = to_uint64(line.substr(0, separator));
+	    if (experiment_id > numeric_limits<uint16_t>::max()) {
+		throw runtime_error("invalid expt_id: " + line_storage);
+	    }
+	    const string_view rest_of_string = line.substr(separator+1);
+	    Json::Reader reader;
+	    Json::Value doc;
+	    reader.parse(string(rest_of_string), doc);
+	    experiments.resize(experiment_id + 1);
+	    string name = doc["abr_name"].asString();
+	    if (name.empty()) {
+		name = doc["abr"].asString();
+	    }
+	    experiments.at(experiment_id) = name + "/" + doc["cc"].asString();
+	}
+    }
+
+public:
+    Parser(const string & experiment_dump_filename)
+	: sessions()
+    {
+	sessions.set_empty_key({0,0,0,-1,-1});
+
+	read_experimental_settings_dump(experiment_dump_filename);
+    }
+
+    void parse_stdin() {
+	ios::sync_with_stdio(false);
+	string line_storage;
+
+	unsigned int line_no = 0;
+
+	vector<string_view> fields, measurement_tag_set_fields, field_key_value;
+
+	while (cin.good()) {
+	    if (line_no % 1000000 == 0) {
+		const size_t rss = memcheck() / 1024;
+		cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n";
+	    }
+
+	    getline(cin, line_storage);
+	    line_no++;
+
+	    const string_view line{line_storage};
+
+	    if (line.empty() or line.front() == '#') {
+		continue;
+	    }
+
+	    if (line.size() > numeric_limits<uint8_t>::max()) {
+		throw runtime_error("Line " + to_string(line_no) + " too long");
+	    }
+
+	    split_on_char(line, ' ', fields);
+	    if (fields.size() != 3) {
+		if (not line.compare(0, 15, "CREATE DATABASE"sv)) {
 		    continue;
 		}
-		if (not event.complete()) {
-		    throw runtime_error("incomplete event with timestamp " + to_string(ts));
-		}
 
-		sessions[{*event.init_id, *event.user_id, *event.expt_id, server, channel}].emplace_back(ts, &event);
+		cerr << "Ignoring line with wrong number of fields: " << string(line) << "\n";
+		continue;
+	    }
+
+	    const auto [measurement_tag_set, field_set, timestamp_str] = tie(fields[0], fields[1], fields[2]);
+
+	    const uint64_t timestamp{to_uint64(timestamp_str)};
+
+	    split_on_char(measurement_tag_set, ',', measurement_tag_set_fields);
+	    if (measurement_tag_set_fields.empty()) {
+		throw runtime_error("No measurement field on line " + to_string(line_no));
+	    }
+	    const auto measurement = measurement_tag_set_fields[0];
+
+	    split_on_char(field_set, '=', field_key_value);
+	    if (field_key_value.size() != 2) {
+		throw runtime_error("Irregular number of fields in field set: " + string(line));
+	    }
+
+	    const auto [key, value] = tie(field_key_value[0], field_key_value[1]);
+
+	    try {
+		if ( measurement == "client_buffer"sv ) {
+		    client_buffer[get_server_id(measurement_tag_set_fields)][get_channel(measurement_tag_set_fields)][timestamp].insert_unique(key, value, usernames);
+		} else if ( measurement == "active_streams"sv ) {
+		    // skip
+		} else if ( measurement == "backlog"sv ) {
+		    // skip
+		} else if ( measurement == "channel_status"sv ) {
+		    // skip
+		} else if ( measurement == "client_error"sv ) {
+		    // skip
+		} else if ( measurement == "client_sysinfo"sv ) {
+		    //		client_sysinfo[timestamp].insert_unique(key, value);
+		} else if ( measurement == "decoder_info"sv ) {
+		    // skip
+		} else if ( measurement == "server_info"sv ) {
+		    // skip
+		} else if ( measurement == "ssim"sv ) {
+		    // skip
+		} else if ( measurement == "video_acked"sv ) {
+		    //		video_acked[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+		} else if ( measurement == "video_sent"sv ) {
+		    //		video_sent[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+		} else if ( measurement == "video_size"sv ) {
+		    // skip
+		} else {
+		    throw runtime_error( "Can't parse: " + string(line) );
+		}
+	    } catch (const exception & e ) {
+		cerr << "Failure on line: " << line << "\n";
+		throw;
 	    }
 	}
     }
 
-    double total_time = 0;
-    double stalled_time = 0;
-    unsigned int had_stall = 0;
+    void accumulate_sessions() {
+	for (uint8_t server = 0; server < client_buffer.size(); server++) {
+	    const size_t rss = memcheck() / 1024;
+	    cerr << "server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
+	    for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
+		for (const auto & [ts,event] : client_buffer[server][channel]) {
+		    if (event.bad) {
+			bad_count++;
+			cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
+			continue;
+		    }
+		    if (not event.complete()) {
+			throw runtime_error("incomplete event with timestamp " + to_string(ts));
+		    }
 
-    for ( const auto & [session_key, events] : sessions ) {
-	cout << "Session: " << usernames.reverse_map(get<1>(session_key)) << " lasted " << (events.back().first - events.front().first) / double(1000000000) << " seconds and spent " << events.back().second->cum_rebuf.value() << " seconds stalled\n";
-	total_time += (events.back().first - events.front().first) / double(1000000000);
-	stalled_time += events.back().second->cum_rebuf.value();
-	if (events.back().second->cum_rebuf.value() > 0) {
-	    had_stall++;
+		    sessions[{*event.init_id, *event.user_id, *event.expt_id, server, channel}].emplace_back(ts, &event);
+		}
+	    }
 	}
     }
 
-    cout << "Overall: " << total_time / double(3600) << " hours played, " << 100 * stalled_time / total_time << "% stalled.\n";
-    cout << "Out of " << sessions.size() << " sessions, " << had_stall << " had a stall, or " << 100.0 * had_stall / double(sessions.size()) << "%.\n";
-    cout << "Memory usage is " << memcheck() / 1024 << " MiB.\n";
-    cout << "Bad data points: " << bad_count << "\n";
+    void analyze_sessions() const {
+	unsigned int bad_count = 0;
+
+	for ( auto & [key, events] : sessions ) {
+	    auto [valid, full, summary] = summarize(key, events);
+	    if (not valid) {
+		bad_count++;
+	    }
+
+	    cout << (valid ? "good " : "bad ") << (full ? "full " : "trunc ") << summary << "\n";
+	}
+
+	cout << "discarded sessions: " << bad_count << "/" << sessions.size() << "\n";
+    }
+
+    static bool too_far_apart( const float a, const float b ) {
+	const float diff = abs(a - b);
+	const float bigger = max(a,b);
+	if (bigger < 30) {
+	    return diff > 10;
+	} else {
+	    return (diff / bigger) > (10.0 / 30.0);
+	}
+    }
+
+    tuple<bool, bool, string> summarize(const session_key & key, const vector<pair<uint64_t, const Event*>> & events) const {
+	const auto & [init_id, uid, expt_id, server, channel] = key;
+
+	const string username = usernames.reverse_map(uid);
+	const string scheme = experiments.at(expt_id);
+
+	string summary = to_string(init_id) + " " + scheme + " " + to_string(init_id) + " extent=" + to_string((events.back().first - events.front().first) / double(1000000000)) + " " + to_string(events.size()) + " events";
+
+	const uint64_t base_time = events.front().first;
+
+	/* find init event */
+	unsigned int init_index = 0;
+	while (init_index < events.size()) {
+	    if (events[init_index].second->type.value() == Event::EventType::Type::init) {
+		break;
+	    }
+	    init_index++;
+	}
+
+	if (init_index == events.size()) {
+	    summary += " [warning, no init event found]";
+	    init_index = 0;
+	} else {
+	    init_index++;
+	}
+
+	float last_sample = 0;
+
+	optional<float> play_started;
+	optional<float> stall_started;
+	optional<float> latest_successful_play_ts;
+	optional<float> startup_delay;
+	float expected_cum_rebuf = 0;
+
+	float total_time_stalled = 0;
+
+	bool truncate = false;
+
+	for ( unsigned int i = init_index; i < events.size(); i++ ) {
+	    if (truncate) {
+		break;
+	    }
+
+	    const auto & [ts, event] = events[i];
+
+	    const float relative_time = (ts - base_time) / 1000000000.0;
+
+	    if (relative_time - last_sample > 5.0) {
+		summary += " time_between_events=" + to_string(relative_time - last_sample);
+		truncate = true;
+		break;
+	    }
+
+	    switch (event->type.value().type) {
+	    case Event::EventType::Type::init:
+		summary += " two init events in this session";
+		return {false, false, summary};
+	    case Event::EventType::Type::play:
+		if (not startup_delay.has_value()) {
+		    summary += " play without startup";
+		    return {false, false, summary};
+		}
+
+		if (play_started.has_value()) {
+		    summary += " two play events with no stall";
+		    return {false, false, summary};
+		} else if (not stall_started.has_value()) {
+		    summary += " stall_started has no value";
+		    return {false, false, summary};
+		} else {
+		    play_started.emplace(relative_time);		    
+		    latest_successful_play_ts.emplace(relative_time);
+		    summary += " stalled=" + to_string(relative_time - stall_started.value());
+		    total_time_stalled += relative_time - stall_started.value();
+		    stall_started.reset();
+		    expected_cum_rebuf += relative_time - last_sample;
+		}
+		break;
+	    case Event::EventType::Type::startup:
+		if (startup_delay.has_value()) {
+		    summary += " startup after already started";
+		    return {false, false, summary};
+		}
+
+		play_started.emplace(relative_time);
+		startup_delay.emplace(event->cum_rebuf.value());
+		latest_successful_play_ts.emplace(relative_time);
+		expected_cum_rebuf = relative_time;
+		if (too_far_apart(expected_cum_rebuf, event->cum_rebuf.value())) {
+		    summary += " startup cum_rebuf expectation mismatch " + to_string(event->cum_rebuf.value()) + " vs. " + to_string(expected_cum_rebuf);
+		    return {false, false, summary};
+		}
+		summary += " startup_delay=" + to_string(event->cum_rebuf.value()) + "@" + to_string(relative_time);
+		break;
+	    case Event::EventType::Type::timer:
+		if (stall_started.has_value()) {
+		    expected_cum_rebuf += relative_time - last_sample;
+		} else if (play_started.has_value()) {
+		    latest_successful_play_ts.emplace(relative_time);
+		}
+
+		if (too_far_apart(expected_cum_rebuf, event->cum_rebuf.value())) {
+		    summary += " timer cum_rebuf expectation mismatch " + to_string(event->cum_rebuf.value()) + " vs. " + to_string(expected_cum_rebuf);
+		    truncate = true;
+		}
+
+		break;
+	    case Event::EventType::Type::rebuffer:
+		if (not startup_delay.has_value()) {
+		    summary += " stall without startup";
+		    return {false, false, summary};
+		}
+
+		if (stall_started.has_value()) {
+		    summary += " two stall events with no play";
+		    return {false, false, summary};
+		} else if (not play_started.has_value()) {
+		    summary += " play_started has no value";
+		    return {false, false, summary};
+		} else {
+		    stall_started.emplace(relative_time);
+		    summary += " played=" + to_string(relative_time - play_started.value());
+		    latest_successful_play_ts.emplace(relative_time); // matches stream_processor.py analysis
+		    play_started.reset();
+		}
+	    }
+
+	    last_sample = relative_time;
+	}
+
+	if (not latest_successful_play_ts.has_value()) {
+	    summary += " neverplayed";
+	    return {false, false, summary};
+	}
+
+	if (play_started
+	    and (latest_successful_play_ts.value() > play_started.value())) {
+	    summary += " played=" + to_string(latest_successful_play_ts.value() - play_started.value());
+	}
+
+	float duration_from_startup_to_last_successful_play = latest_successful_play_ts.value() - startup_delay.value();
+
+	if (total_time_stalled / duration_from_startup_to_last_successful_play > 0.75) {
+	    summary += " >75% stalled";
+	    return {false, false, summary};
+	}
+
+	summary += " total=" + to_string(duration_from_startup_to_last_successful_play) + " stalltime=" + to_string(total_time_stalled) + " startup=" + to_string(startup_delay.value());
+
+	return {true, !truncate, summary};
+    }
+};
+
+void analyze_main(const string & experiment_dump_filename) {
+    Parser parser{ experiment_dump_filename };
+
+    parser.parse_stdin();
+    parser.accumulate_sessions();
+    parser.analyze_sessions();
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     try {
-	parse();
+	if (argc <= 0) {
+	    abort();
+	}
+
+	if (argc != 2) {
+	    cerr << "Usage: " << argv[0] << " expt_dump [from postgres]\n";
+	    return EXIT_FAILURE;
+	}
+
+	analyze_main(argv[1]);
     } catch (const exception & e) {
 	cerr << e.what() << "\n";
 	return EXIT_FAILURE;
