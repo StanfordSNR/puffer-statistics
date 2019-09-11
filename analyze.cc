@@ -459,6 +459,7 @@ public:
     }
 
     struct EventSummary {
+	uint64_t base_time{0};
 	bool valid{false};
 	bool full_extent{true};
 	float time_extent{0};
@@ -483,7 +484,7 @@ public:
 	for ( auto & [key, events] : sessions ) {
 	    const EventSummary summary = summarize(key, events);
 
-	    cout << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " )
+	    cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " )
 		 << summary.scheme << " init=" << summary.init_id << " extent=" << summary.time_extent
 		 << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "% "
 		 << " startup_delay=" << summary.cum_rebuf_at_startup
@@ -517,6 +518,7 @@ public:
 	ret.init_id = init_id;
 
 	const uint64_t base_time = events.front().first;
+	ret.base_time = base_time;
 	ret.time_extent = (events.back().first - base_time) / double(1000000000);
 
 	bool started = false;
@@ -567,7 +569,7 @@ public:
 	    last_sample = relative_time;
 	}
 
-	if (ret.time_at_last_play - ret.time_at_startup <= 5.0) {
+	if (ret.time_at_last_play - ret.time_at_startup < 4.0) {
 	    return ret;
 	}
 
