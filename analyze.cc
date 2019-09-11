@@ -569,7 +569,7 @@ public:
 	    last_sample = relative_time;
 	}
 
-	if (ret.time_at_last_play - ret.time_at_startup < 4.0) {
+	if (ret.time_at_last_play <= ret.time_at_startup) {
 	    return ret;
 	}
 
