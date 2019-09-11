@@ -467,8 +467,10 @@ public:
 
     void analyze_sessions() const {
 	unsigned int bad_count = 0;
+	unsigned int good_count = 0;
 	float total_extent = 0;
 	float total_time_considered = 0;
+	unsigned int stall_count = 0;
 
 	for ( auto & [key, events] : sessions ) {
 	    EventSummary summary = summarize(key, events);
@@ -481,12 +483,17 @@ public:
 
 	    if (summary.valid) {
 		total_time_considered += summary.total_since_startup;
+		good_count++;
+		if (summary.stall_since_first_play > 0) {
+		    stall_count++;
+		}
 	    }
 	}
 
 	cout << "discarded sessions: " << bad_count << "/" << sessions.size() << "\n";
 	cout << "total time extent: " << total_extent / 3600.0 << " hours\n";
 	cout << "total time considered: " << total_time_considered / 3600.0 << " hours " << 100 * total_time_considered / total_extent << "%\n";
+	cout << "sessions with stalls: " << stall_count << "/" << good_count << "\n";
     }
 
     static bool too_far_apart( const float a, const float b ) {
