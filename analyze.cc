@@ -458,19 +458,35 @@ public:
 	}
     }
 
+    struct EventSummary {
+	bool valid{false};
+	bool full_extent{true};
+	string summary{};
+	float time_extent{0}, total_since_startup{0}, total_since_first_play{0}, stall_since_first_play{0};
+    };
+
     void analyze_sessions() const {
 	unsigned int bad_count = 0;
+	float total_extent = 0;
+	float total_time_considered = 0;
 
 	for ( auto & [key, events] : sessions ) {
-	    auto [valid, full, summary] = summarize(key, events);
-	    if (not valid) {
+	    EventSummary summary = summarize(key, events);
+	    if (not summary.valid) {
 		bad_count++;
 	    }
 
-	    cout << (valid ? "good " : "bad ") << (full ? "full " : "trunc ") << summary << "\n";
+	    cout << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc ") << summary.summary << "\n";
+	    total_extent += summary.time_extent;
+
+	    if (summary.valid) {
+		total_time_considered += summary.total_since_startup;
+	    }
 	}
 
 	cout << "discarded sessions: " << bad_count << "/" << sessions.size() << "\n";
+	cout << "total time extent: " << total_extent / 3600.0 << " hours\n";
+	cout << "total time considered: " << total_time_considered / 3600.0 << " hours " << 100 * total_time_considered / total_extent << "%\n";
     }
 
     static bool too_far_apart( const float a, const float b ) {
@@ -483,15 +499,19 @@ public:
 	}
     }
 
-    tuple<bool, bool, string> summarize(const session_key & key, const vector<pair<uint64_t, const Event*>> & events) const {
+    EventSummary summarize(const session_key & key, const vector<pair<uint64_t, const Event*>> & events) const {
 	const auto & [init_id, uid, expt_id, server, channel] = key;
 
 	const string username = usernames.reverse_map(uid);
 	const string scheme = experiments.at(expt_id);
 
-	string summary = to_string(init_id) + " " + scheme + " " + to_string(init_id) + " extent=" + to_string((events.back().first - events.front().first) / double(1000000000)) + " " + to_string(events.size()) + " events";
+	EventSummary ret;
 
 	const uint64_t base_time = events.front().first;
+
+	ret.time_extent = (events.back().first - base_time) / double(1000000000);
+
+	ret.summary = to_string(init_id) + " " + scheme + " " + to_string(init_id) + " extent=" + to_string(ret.time_extent) + " " + to_string(events.size()) + " events";
 
 	/* find init event */
 	unsigned int init_index = 0;
@@ -503,7 +523,7 @@ public:
 	}
 
 	if (init_index == events.size()) {
-	    summary += " [warning, no init event found]";
+	    ret.summary += " [warning, no init event found]";
 	    init_index = 0;
 	} else {
 	    init_index++;
@@ -519,10 +539,8 @@ public:
 
 	float total_time_stalled = 0;
 
-	bool truncate = false;
-
 	for ( unsigned int i = init_index; i < events.size(); i++ ) {
-	    if (truncate) {
+	    if (not ret.full_extent) {
 		break;
 	    }
 
@@ -531,31 +549,31 @@ public:
 	    const float relative_time = (ts - base_time) / 1000000000.0;
 
 	    if (relative_time - last_sample > 5.0) {
-		summary += " time_between_events=" + to_string(relative_time - last_sample);
-		truncate = true;
+		ret.summary += " time_between_events=" + to_string(relative_time - last_sample);
+		ret.full_extent = false;
 		break;
 	    }
 
 	    switch (event->type.value().type) {
 	    case Event::EventType::Type::init:
-		summary += " two init events in this session";
-		return {false, false, summary};
+		ret.summary += " two init events in this session";
+		return ret;
 	    case Event::EventType::Type::play:
 		if (not startup_delay.has_value()) {
-		    summary += " play without startup";
-		    return {false, false, summary};
+		    ret.summary += " play without startup";
+		    return ret;
 		}
 
 		if (play_started.has_value()) {
-		    summary += " two play events with no stall";
-		    return {false, false, summary};
+		    ret.summary += " two play events with no stall";
+		    return ret;
 		} else if (not stall_started.has_value()) {
-		    summary += " stall_started has no value";
-		    return {false, false, summary};
+		    ret.summary += " stall_started has no value";
+		    return ret;
 		} else {
 		    play_started.emplace(relative_time);		    
 		    latest_successful_play_ts.emplace(relative_time);
-		    summary += " stalled=" + to_string(relative_time - stall_started.value());
+		    ret.summary += " stalled=" + to_string(relative_time - stall_started.value());
 		    total_time_stalled += relative_time - stall_started.value();
 		    stall_started.reset();
 		    expected_cum_rebuf += relative_time - last_sample;
@@ -563,8 +581,8 @@ public:
 		break;
 	    case Event::EventType::Type::startup:
 		if (startup_delay.has_value()) {
-		    summary += " startup after already started";
-		    return {false, false, summary};
+		    ret.summary += " startup after already started";
+		    return ret;
 		}
 
 		play_started.emplace(relative_time);
@@ -572,10 +590,10 @@ public:
 		latest_successful_play_ts.emplace(relative_time);
 		expected_cum_rebuf = relative_time;
 		if (too_far_apart(expected_cum_rebuf, event->cum_rebuf.value())) {
-		    summary += " startup cum_rebuf expectation mismatch " + to_string(event->cum_rebuf.value()) + " vs. " + to_string(expected_cum_rebuf);
-		    return {false, false, summary};
+		    ret.summary += " startup cum_rebuf expectation mismatch " + to_string(event->cum_rebuf.value()) + " vs. " + to_string(expected_cum_rebuf);
+		    return ret;
 		}
-		summary += " startup_delay=" + to_string(event->cum_rebuf.value()) + "@" + to_string(relative_time);
+		ret.summary += " startup_delay=" + to_string(event->cum_rebuf.value()) + "@" + to_string(relative_time);
 		break;
 	    case Event::EventType::Type::timer:
 		if (stall_started.has_value()) {
@@ -585,26 +603,26 @@ public:
 		}
 
 		if (too_far_apart(expected_cum_rebuf, event->cum_rebuf.value())) {
-		    summary += " timer cum_rebuf expectation mismatch " + to_string(event->cum_rebuf.value()) + " vs. " + to_string(expected_cum_rebuf);
-		    truncate = true;
+		    ret.summary += " timer cum_rebuf expectation mismatch " + to_string(event->cum_rebuf.value()) + " vs. " + to_string(expected_cum_rebuf);
+		    ret.full_extent = false;
 		}
 
 		break;
 	    case Event::EventType::Type::rebuffer:
 		if (not startup_delay.has_value()) {
-		    summary += " stall without startup";
-		    return {false, false, summary};
+		    ret.summary += " stall without startup";
+		    return ret;
 		}
 
 		if (stall_started.has_value()) {
-		    summary += " two stall events with no play";
-		    return {false, false, summary};
+		    ret.summary += " two stall events with no play";
+		    return ret;
 		} else if (not play_started.has_value()) {
-		    summary += " play_started has no value";
-		    return {false, false, summary};
+		    ret.summary += " play_started has no value";
+		    return ret;
 		} else {
 		    stall_started.emplace(relative_time);
-		    summary += " played=" + to_string(relative_time - play_started.value());
+		    ret.summary += " played=" + to_string(relative_time - play_started.value());
 		    latest_successful_play_ts.emplace(relative_time); // matches stream_processor.py analysis
 		    play_started.reset();
 		}
@@ -614,25 +632,29 @@ public:
 	}
 
 	if (not latest_successful_play_ts.has_value()) {
-	    summary += " neverplayed";
-	    return {false, false, summary};
+	    ret.summary += " neverplayed";
+	    return ret;
 	}
 
 	if (play_started
 	    and (latest_successful_play_ts.value() > play_started.value())) {
-	    summary += " played=" + to_string(latest_successful_play_ts.value() - play_started.value());
+	    ret.summary += " played=" + to_string(latest_successful_play_ts.value() - play_started.value());
 	}
 
 	float duration_from_startup_to_last_successful_play = latest_successful_play_ts.value() - startup_delay.value();
+	ret.total_since_startup = latest_successful_play_ts.value();
+	ret.total_since_first_play = latest_successful_play_ts.value() - startup_delay.value();
+	ret.stall_since_first_play = total_time_stalled;
 
 	if (total_time_stalled / duration_from_startup_to_last_successful_play > 0.75) {
-	    summary += " >75% stalled";
-	    return {false, false, summary};
+	    ret.summary += " >75% stalled";
+	    return ret;
 	}
 
-	summary += " total=" + to_string(duration_from_startup_to_last_successful_play) + " stalltime=" + to_string(total_time_stalled) + " startup=" + to_string(startup_delay.value());
+	ret.summary += " total_since_startup=" + to_string(duration_from_startup_to_last_successful_play) + " stalltime=" + to_string(total_time_stalled) + " startup=" + to_string(startup_delay.value());
+	ret.valid = true;
 
-	return {true, !truncate, summary};
+	return ret;
     }
 };
 
