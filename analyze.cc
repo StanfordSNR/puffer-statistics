@@ -13,6 +13,10 @@
 #include <google/dense_hash_map>
 #include <boost/container_hash/hash.hpp>
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <jsoncpp/json/json.h>
 
 #include <sys/time.h>
@@ -121,14 +125,14 @@ uint64_t get_server_id(const vector<string_view> & fields) {
     return server_id;
 }
 
-class username_table {
+class string_table {
     uint32_t next_id_ = 0;
 
     dense_hash_map<string, uint32_t> forward_{};
     dense_hash_map<uint32_t, string> reverse_{};
 
 public:
-    username_table() {
+    string_table() {
 	forward_.set_empty_key({});
 	reverse_.set_empty_key(-1);
     }
@@ -225,7 +229,7 @@ struct Event {
 	}
     }
 
-    void insert_unique(const string_view key, const string_view value, username_table & usernames ) {
+    void insert_unique(const string_view key, const string_view value, string_table & usernames ) {
 	if (key == "init_id"sv) {
 	    set_unique( init_id, influx_integer<uint32_t>( value ) );
 	} else if (key == "expt_id"sv) {
@@ -247,7 +251,80 @@ struct Event {
     }
 };
 
-using key_table = map<uint64_t, Event>;
+struct Sysinfo {
+    optional<uint32_t> browser_id{};
+    optional<uint32_t> expt_id{};
+    optional<uint32_t> user_id{};
+    optional<uint32_t> init_id{};
+    optional<uint32_t> os{};
+    optional<uint32_t> ip{};
+
+    bool bad = false;
+
+    bool complete() const {
+	return browser_id and expt_id and user_id and init_id and os and ip;
+    }
+
+    bool operator==(const Sysinfo & other) const {
+	return browser_id == other.browser_id
+	    and expt_id == other.expt_id
+	    and user_id == other.user_id
+	    and init_id == other.init_id
+	    and os == other.os
+	    and ip == other.ip;
+    }
+
+    bool operator!=(const Sysinfo & other) const { return not operator==(other); }
+
+    template <typename T>
+    void set_unique( optional<T> & field, const T & value ) {
+	if (not field.has_value()) {
+	    field.emplace(value);
+	} else {
+	    if (field.value() != value) {
+		if (not bad) {
+		    bad = true;
+		    cerr << "error trying to set contradictory sysinfo value: ";
+		    cerr << "init_id=" << init_id.value_or(-1)
+			 << ", expt_id=" << expt_id.value_or(-1)
+			 << ", user_id=" << user_id.value_or(-1)
+			 << "\n";
+		}
+		//		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+	    }
+	}
+    }
+
+    void insert_unique(const string_view key, const string_view value,
+		       string_table & usernames,
+		       string_table & browsers,
+		       string_table & ostable ) {
+	if (key == "init_id"sv) {
+	    set_unique( init_id, influx_integer<uint32_t>( value ) );
+	} else if (key == "expt_id"sv) {
+	    set_unique( expt_id, influx_integer<uint32_t>( value ) );
+	} else if (key == "user"sv) {
+	    if (value.size() <= 2 or value.front() != '"' or value.back() != '"') {
+		throw runtime_error("invalid username string: " + string(value));
+	    }
+	    set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
+	} else if (key == "browser"sv) {
+	    set_unique( browser_id, browsers.forward_map_vivify(string(value.substr(1,value.size()-2))) );
+	} else if (key == "os"sv) {
+	    string osname(value.substr(1,value.size()-2));
+	    for (auto & x : osname) {
+		if ( x == ' ' ) { x = '_'; }
+	    }
+	    set_unique( os, ostable.forward_map_vivify(osname) );
+	} else if (key == "ip"sv) {
+	    set_unique( ip, inet_addr(string(value.substr(1,value.size()-2)).c_str()) );
+	} else if (key == "screen_width"sv or key == "screen_height"sv) {
+	    // ignore
+	} else {
+	    throw runtime_error( "unknown key: " + string(key) );
+	}
+    }
+};
 
 struct Channel {
     constexpr static uint8_t COUNT = 6;
@@ -289,14 +366,25 @@ Channel get_channel(const vector<string_view> & fields) {
     throw runtime_error("channel missing");
 }
 
+using event_table = map<uint64_t, Event>;
+using sysinfo_table = map<uint64_t, Sysinfo>;
+
 class Parser {
 private:
-    username_table usernames{};
-    array<array<key_table, Channel::COUNT>, SERVER_COUNT> client_buffer{};
+    string_table usernames{};
+    string_table browsers{};
+    string_table ostable{};
+
+    array<array<event_table, Channel::COUNT>, SERVER_COUNT> client_buffer{};
+    array<sysinfo_table, SERVER_COUNT> client_sysinfo{};
 
     using session_key = tuple<uint32_t, uint32_t, uint32_t, uint8_t, uint8_t>;
     /*                        init_id,  uid,      expt_id,  server,  channel */
     dense_hash_map<session_key, vector<pair<uint64_t, const Event*>>, boost::hash<session_key>> sessions;
+
+    using sysinfo_key = tuple<uint32_t, uint32_t, uint32_t, uint8_t>;
+    /*                        init_id,  uid,      expt_id,  server */
+    dense_hash_map<sysinfo_key, Sysinfo, boost::hash<sysinfo_key>> sysinfos;
 
     unsigned int bad_count = 0;
 
@@ -341,9 +429,14 @@ private:
 
 public:
     Parser(const string & experiment_dump_filename)
-	: sessions()
+	: sessions(), sysinfos()
     {
 	sessions.set_empty_key({0,0,0,-1,-1});
+	sysinfos.set_empty_key({0,0,0,-1});
+
+	usernames.forward_map_vivify("unknown");
+	browsers.forward_map_vivify("unknown");
+	ostable.forward_map_vivify("unknown");
 
 	read_experimental_settings_dump(experiment_dump_filename);
     }
@@ -404,7 +497,9 @@ public:
 
 	    try {
 		if ( measurement == "client_buffer"sv ) {
-		    client_buffer[get_server_id(measurement_tag_set_fields)][get_channel(measurement_tag_set_fields)][timestamp].insert_unique(key, value, usernames);
+		    const auto server_id = get_server_id(measurement_tag_set_fields);
+		    const auto channel = get_channel(measurement_tag_set_fields);
+		    client_buffer[server_id][channel][timestamp].insert_unique(key, value, usernames);
 		} else if ( measurement == "active_streams"sv ) {
 		    // skip
 		} else if ( measurement == "backlog"sv ) {
@@ -414,7 +509,8 @@ public:
 		} else if ( measurement == "client_error"sv ) {
 		    // skip
 		} else if ( measurement == "client_sysinfo"sv ) {
-		    //		client_sysinfo[timestamp].insert_unique(key, value);
+		    const auto server_id = get_server_id(measurement_tag_set_fields);
+		    client_sysinfo[server_id][timestamp].insert_unique(key, value, usernames, browsers, ostable);
 		} else if ( measurement == "decoder_info"sv ) {
 		    // skip
 		} else if ( measurement == "server_info"sv ) {
@@ -440,7 +536,7 @@ public:
     void accumulate_sessions() {
 	for (uint8_t server = 0; server < client_buffer.size(); server++) {
 	    const size_t rss = memcheck() / 1024;
-	    cerr << "server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
+	    cerr << "session_server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
 	    for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
 		for (const auto & [ts,event] : client_buffer[server][channel]) {
 		    if (event.bad) {
@@ -453,6 +549,34 @@ public:
 		    }
 
 		    sessions[{*event.init_id, *event.user_id, *event.expt_id, server, channel}].emplace_back(ts, &event);
+		}
+	    }
+	}
+    }
+
+    void accumulate_sysinfos() {
+	for (uint8_t server = 0; server < client_buffer.size(); server++) {
+	    const size_t rss = memcheck() / 1024;
+	    cerr << "sysinfo_server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
+	    for (const auto & [ts,sysinfo] : client_sysinfo[server]) {
+		if (sysinfo.bad) {
+		    bad_count++;
+		    cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
+
+		    continue;
+		}
+		if (not sysinfo.complete()) {
+		    throw runtime_error("incomplete event with timestamp " + to_string(ts));
+		}
+
+		const sysinfo_key key{*sysinfo.init_id, *sysinfo.user_id, *sysinfo.expt_id, server};
+		const auto it = sysinfos.find(key);
+		if (it == sysinfos.end()) {
+		    sysinfos[key] = sysinfo;
+		} else {
+		    if (sysinfos[key] != sysinfo) {
+			throw runtime_error("contradictory sysinfo for " + to_string(*sysinfo.init_id));
+		    }
 		}
 	    }
 	}
@@ -481,11 +605,35 @@ public:
 	unsigned int good_sessions=0;
 	unsigned int good_and_full=0;
 
+	unsigned int missing_sysinfo = 0;
+
 	for ( auto & [key, events] : sessions ) {
+	    Sysinfo sysinfo{0,0,0,0,0,0};
+	    int channel_changes = -1;
+	    for ( unsigned int decrement = 0; decrement < 1024; decrement++ ) {
+		const auto sysinfo_it = sysinfos.find({get<0>(key) - decrement,
+						       get<1>(key),
+						       get<2>(key),
+						       get<3>(key)});
+		if (sysinfo_it == sysinfos.end()) {
+		    // loop again
+		} else {
+		    sysinfo = sysinfo_it->second;
+		    channel_changes = decrement;
+		    break;
+		}
+	    }
+
+	    if (channel_changes == -1) {
+		missing_sysinfo++;
+	    }
+
 	    const EventSummary summary = summarize(key, events);
 
 	    cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " )
-		 << summary.scheme << " init=" << summary.init_id << " extent=" << summary.time_extent
+		 << summary.scheme << " " << inet_ntoa({sysinfo.ip.value()})
+		 << " " << ostable.reverse_map(sysinfo.os.value())
+		 << " " << channel_changes << " init=" << summary.init_id << " extent=" << summary.time_extent
 		 << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "% "
 		 << " startup_delay=" << summary.cum_rebuf_at_startup
 		 << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
@@ -506,7 +654,7 @@ public:
 	    }
 	}
 
-	cout << "num_sessions=" << sessions.size() << " good=" << good_sessions << " good_and_full=" << good_and_full << " had_stall=" << had_stall << "\n";
+	cout << "num_sessions=" << sessions.size() << " good=" << good_sessions << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " had_stall=" << had_stall << "\n";
 	cout << "total_extent=" << total_extent / 3600.0 << " total_time_after_startup=" << total_time_after_startup / 3600.0 << " total_stall_time=" << total_stall_time / 3600.0 << "\n";
     }
 
@@ -588,6 +736,7 @@ void analyze_main(const string & experiment_dump_filename) {
 
     parser.parse_stdin();
     parser.accumulate_sessions();
+    parser.accumulate_sysinfos();
     parser.analyze_sessions();
 }
 
