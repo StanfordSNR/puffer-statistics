@@ -107,7 +107,7 @@ T influx_integer(const string_view str) {
     return static_cast<T>(ret_64);
 }
 
-constexpr uint8_t SERVER_COUNT = 64;
+constexpr uint8_t SERVER_COUNT = 255;
 
 uint64_t get_server_id(const vector<string_view> & fields) {
     uint64_t server_id = -1;
