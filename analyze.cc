@@ -518,7 +518,7 @@ public:
 			cerr << "Error with server_id: " << e.what() << "\n";
 		    }
 
-		    if (server_id.value()) {
+		    if (server_id.has_value()) {
 			client_sysinfo[server_id.value()][timestamp].insert_unique(key, value, usernames, browsers, ostable);
 		    }
 		} else if ( measurement == "decoder_info"sv ) {
