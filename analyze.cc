@@ -509,8 +509,18 @@ public:
 		} else if ( measurement == "client_error"sv ) {
 		    // skip
 		} else if ( measurement == "client_sysinfo"sv ) {
-		    const auto server_id = get_server_id(measurement_tag_set_fields);
-		    client_sysinfo[server_id][timestamp].insert_unique(key, value, usernames, browsers, ostable);
+		    // some records in 2019-09-08T11_2019-09-09T11 have a crazy server_id and
+		    // seemingly the older record structure (with user= as part of the tags)
+		    optional<uint64_t> server_id;
+		    try {
+			server_id.emplace(get_server_id(measurement_tag_set_fields));
+		    } catch (const exception & e) {
+			cerr << "Error with server_id: " << e.what() << "\n";
+		    }
+
+		    if (server_id.value()) {
+			client_sysinfo[server_id.value()][timestamp].insert_unique(key, value, usernames, browsers, ostable);
+		    }
 		} else if ( measurement == "decoder_info"sv ) {
 		    // skip
 		} else if ( measurement == "server_info"sv ) {
