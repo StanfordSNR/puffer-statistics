@@ -9,17 +9,14 @@
 #include <map>
 #include <cstring>
 #include <fstream>
-#include <google/sparse_hash_map>
-#include <google/dense_hash_map>
-#include <boost/container_hash/hash.hpp>
+#include <random>
+#include <algorithm>
 
 #include <sys/time.h>
 #include <sys/resource.h>
 
 using namespace std;
 using namespace std::literals;
-using google::sparse_hash_map;
-using google::dense_hash_map;
 
 size_t memcheck() {
     rusage usage{};
@@ -66,7 +63,7 @@ uint64_t to_uint64(string_view str) {
     return ret;
 }
 
-float to_float(const string_view str) {
+double to_double(const string_view str) {
     /* sadly, g++ 8 doesn't seem to have floating-point C++17 from_chars() yet
     float ret;
     const auto [ptr, ignore] = from_chars(str.data(), str.data() + str.size(), ret);
@@ -82,14 +79,46 @@ float to_float(const string_view str) {
     char old_value = *null_byte;
     *null_byte = 0;
 
-    const float ret = atof(str.data());
+    const double ret = atof(str.data());
 
     *null_byte = old_value;
 
     return ret;
 }
 
+struct SchemeStats {
+    array<vector<double>, 32> binned_stall_ratios{};
+
+    unsigned int samples = 0;
+    double total_watch_time = 0;
+    double total_stall_time = 0;    
+
+    static unsigned int watch_time_bin(const double raw_watch_time) {
+	const int watch_time_bin = lrintf(floorf(log2(raw_watch_time)));
+	if (watch_time_bin < 2 or watch_time_bin > 20) {
+	    throw runtime_error("binned watch time error");
+	}
+	return watch_time_bin;
+    }
+
+    void add_sample(const double watch_time, const double stall_time) {
+	binned_stall_ratios.at(watch_time_bin(watch_time)).push_back(stall_time / watch_time);
+
+	samples++;
+	total_watch_time += watch_time;
+	total_stall_time += stall_time;	
+    }
+
+    double observed_stall_ratio() const {
+	return total_stall_time / total_watch_time;
+    }
+};
+
 class Statistics {
+    vector<double> all_watch_times{};
+
+    SchemeStats puffer{}, mpc{};
+
 public:
     void parse_stdin() {
 	ios::sync_with_stdio(false);
@@ -97,7 +126,8 @@ public:
 
 	unsigned int line_no = 0;
 
-	vector<string_view> fields, measurement_tag_set_fields, field_key_value;
+	vector<string_view> fields;
+	vector<string_view> scratch;
 
 	while (cin.good()) {
 	    if (line_no % 1000000 == 0) {
@@ -119,15 +149,112 @@ public:
 	    }
 
 	    split_on_char(line, ' ', fields);
-	    if (fields.size() != 3) {
-		if (not line.compare(0, 15, "CREATE DATABASE"sv)) {
-		    continue;
-		}
+	    if (fields.size() != 13) {
+		throw runtime_error("Bad line: " + line_storage);
+	    }
 
-		cerr << "Ignoring line with wrong number of fields: " << string(line) << "\n";
+	    const auto & [ts_str, goodbad, fulltrunc, scheme, ip, os, channelchange, init_id,
+			  extent, usedpct, startup_delay, time_after_startup,
+			  time_stalled]
+		= tie(fields[0], fields[1], fields[2], fields[3],
+		      fields[4], fields[5], fields[6], fields[7],
+		      fields[8], fields[9], fields[10], fields[11],
+		      fields[12]);
+
+	    const uint64_t ts = to_uint64(ts_str);
+
+	    if ((ts >= 1547884800 and ts < 1565193009) or (ts > 1567206883)) {
+		// analyze this period: January 19-August 7, and August 30 onward
+		// this is the primary study period
+	    } else {
 		continue;
 	    }
+
+	    split_on_char(time_after_startup, '=', scratch);
+	    if (scratch[0] != "total_after_startup"sv) {
+		throw runtime_error("field mismatch");
+	    }
+
+	    const double watch_time = to_double(scratch[1]);
+
+	    if (watch_time < 4) {
+		continue;
+	    }
+
+	    // record distribution of *all* watch times (independent of scheme)
+	    all_watch_times.push_back(watch_time);
+
+	    split_on_char(time_stalled, '=', scratch);
+	    if (scratch[0] != "stall_after_startup"sv) {
+		throw runtime_error("stall field mismatch");
+	    }
+
+	    const double stall_time = to_double(scratch[1]);
+
+	    // record stall ratios (as a function of scheme and rounded watch time)
+	    if (scheme == "puffer_ttp_cl/bbr"sv) {
+		puffer.add_sample(watch_time, stall_time);
+	    } else if (scheme == "mpc/bbr"sv) {
+		mpc.add_sample(watch_time, stall_time);
+	    }
 	}
+    }
+
+    pair<double, double> simulate( default_random_engine & prng, const SchemeStats & scheme ) {
+	/* step 1: draw a random watch duration */
+	uniform_int_distribution<> possible_watch_time_index(0, all_watch_times.size() - 1);
+	const double simulated_watch_time = all_watch_times.at(possible_watch_time_index(prng));
+	    
+	/* step 2: draw a stall ratio for the scheme from a similar observed watch time */
+	unsigned int simulated_watch_time_binned = SchemeStats::watch_time_bin(simulated_watch_time);
+	size_t num_stall_ratio_samples = scheme.binned_stall_ratios.at(simulated_watch_time_binned).size();
+
+	uniform_int_distribution<> possible_stall_ratio_index(0, num_stall_ratio_samples - 1);
+	const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(possible_stall_ratio_index(prng));
+
+	return {simulated_watch_time, simulated_stall_time};
+    }
+
+    void do_point_estimate() {
+	random_device rd;
+	default_random_engine prng(rd());
+
+	constexpr unsigned int iteration_count = 1000;
+
+	vector<double> puffer_stall_ratios;
+	vector<double> mpc_stall_ratios;
+
+	for (unsigned int i = 0; i < iteration_count; i++) {
+	    if (i % 10 == 0) {
+		cerr << "sample " << i << "\n";
+	    }
+
+	    SchemeStats puffer_simulated{}, mpc_simulated{};
+
+	    for (unsigned int i = 0; i < puffer.samples; i++) {
+		/* simulate a viewer watching for some amount (drawn from the global distribution),
+		   and then seeing a stall ratio (drawn from the scheme's distribution of stall ratios
+		   from nearby watch times) */
+
+		const auto [puffer_watch, puffer_stall] = simulate(prng, puffer);
+		puffer_simulated.add_sample(puffer_watch, puffer_stall);
+	    }
+	    puffer_stall_ratios.push_back(puffer_simulated.observed_stall_ratio());
+
+	    for (unsigned int i = 0; i < mpc.samples; i++) {
+		const auto [mpc_watch, mpc_stall] = simulate(prng, mpc);
+		mpc_simulated.add_sample(mpc_watch, mpc_stall);
+	    }
+	    mpc_stall_ratios.push_back(mpc_simulated.observed_stall_ratio());
+	}
+
+	/* report statistics */
+	sort(puffer_stall_ratios.begin(), puffer_stall_ratios.end());
+	sort(mpc_stall_ratios.begin(), mpc_stall_ratios.end());
+
+	cout << "Puffer stall ratio (95% CI): " << 100 * puffer_stall_ratios[.025 * puffer_stall_ratios.size()] << "% .. " << 100 *puffer_stall_ratios[.975 * puffer_stall_ratios.size()] << "%\n";
+
+	cout << "MPC stall ratio (95% CI): " << 100 * mpc_stall_ratios[.025 * mpc_stall_ratios.size()] << "% .. " << 100 * mpc_stall_ratios[.975 * mpc_stall_ratios.size()] << "%\n";
     }
 };
 
@@ -135,6 +262,7 @@ void analyze_main() {
     Statistics stats;
 
     stats.parse_stdin();
+    stats.do_point_estimate();
 }
 
 int main(int argc, char *argv[]) {
