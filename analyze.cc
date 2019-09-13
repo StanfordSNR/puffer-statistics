@@ -576,7 +576,7 @@ public:
 		    continue;
 		}
 		if (not sysinfo.complete()) {
-		    throw runtime_error("incomplete event with timestamp " + to_string(ts));
+		    throw runtime_error("incomplete sysinfo with timestamp " + to_string(ts));
 		}
 
 		const sysinfo_key key{*sysinfo.init_id, *sysinfo.user_id, *sysinfo.expt_id};
