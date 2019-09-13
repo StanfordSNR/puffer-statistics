@@ -683,6 +683,9 @@ public:
 
 	float last_sample = 0.0;
 
+	optional<float> time_low_buffer_started;
+	float last_buffer=0, last_cum_rebuf=0;
+
 	for ( unsigned int i = 0; i < events.size(); i++ ) {
 	    if (not ret.full_extent) {
 		break;
@@ -692,15 +695,41 @@ public:
 
 	    const float relative_time = (ts - base_time) / 1000000000.0;
 
-	    if (relative_time - last_sample > 10.0) {
+	    if (relative_time - last_sample > 8.0) {
 		ret.full_extent = false;
 		break;
+	    }
+
+	    if (event->buffer.value() > 0.3) {
+		time_low_buffer_started.reset();
+	    } else {
+		if (not time_low_buffer_started.has_value()) {
+		    time_low_buffer_started.emplace(relative_time);
+		}
+	    }
+
+	    if (time_low_buffer_started.has_value()) {
+		if (relative_time - time_low_buffer_started.value() > 20) {
+		    // very long rebuffer
+		    return ret;
+		}
+	    }
+
+	    if (event->buffer.value() > 5 and last_buffer > 5) {
+		if (event->cum_rebuf.value() > last_cum_rebuf + 0.15) {
+		    // stall with plenty of buffer --> slow decoder?
+		    return ret;
+		}
 	    }
 
 	    switch (event->type.value().type) {
 	    case Event::EventType::Type::init:
 		break;
 	    case Event::EventType::Type::play:
+		playing = true;
+		ret.time_at_last_play = relative_time;
+		ret.cum_rebuf_at_last_play = event->cum_rebuf.value();
+		break;
 	    case Event::EventType::Type::startup:
 		if ( not started ) {
 		    ret.time_at_startup = relative_time;
@@ -724,6 +753,8 @@ public:
 	    }
 
 	    last_sample = relative_time;
+	    last_buffer = event->buffer.value();;
+	    last_cum_rebuf = event->cum_rebuf.value();
 	}
 
 	if (ret.time_at_last_play <= ret.time_at_startup) {
@@ -731,6 +762,10 @@ public:
 	}
 
 	if (ret.cum_rebuf_at_last_play < ret.cum_rebuf_at_startup) {
+	    return ret;
+	}
+
+	if (not started) {
 	    return ret;
 	}
 
