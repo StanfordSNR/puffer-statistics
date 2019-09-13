@@ -382,8 +382,8 @@ private:
     /*                        init_id,  uid,      expt_id,  server,  channel */
     dense_hash_map<session_key, vector<pair<uint64_t, const Event*>>, boost::hash<session_key>> sessions;
 
-    using sysinfo_key = tuple<uint32_t, uint32_t, uint32_t, uint8_t>;
-    /*                        init_id,  uid,      expt_id,  server */
+    using sysinfo_key = tuple<uint32_t, uint32_t, uint32_t>;
+    /*                        init_id,  uid,      expt_id */
     dense_hash_map<sysinfo_key, Sysinfo, boost::hash<sysinfo_key>> sysinfos;
 
     unsigned int bad_count = 0;
@@ -432,7 +432,7 @@ public:
 	: sessions(), sysinfos()
     {
 	sessions.set_empty_key({0,0,0,-1,-1});
-	sysinfos.set_empty_key({0,0,0,-1});
+	sysinfos.set_empty_key({0,0,0});
 
 	usernames.forward_map_vivify("unknown");
 	browsers.forward_map_vivify("unknown");
@@ -569,7 +569,7 @@ public:
 		    throw runtime_error("incomplete event with timestamp " + to_string(ts));
 		}
 
-		const sysinfo_key key{*sysinfo.init_id, *sysinfo.user_id, *sysinfo.expt_id, server};
+		const sysinfo_key key{*sysinfo.init_id, *sysinfo.user_id, *sysinfo.expt_id};
 		const auto it = sysinfos.find(key);
 		if (it == sysinfos.end()) {
 		    sysinfos[key] = sysinfo;
@@ -613,8 +613,7 @@ public:
 	    for ( unsigned int decrement = 0; decrement < 1024; decrement++ ) {
 		const auto sysinfo_it = sysinfos.find({get<0>(key) - decrement,
 						       get<1>(key),
-						       get<2>(key),
-						       get<3>(key)});
+						       get<2>(key)});
 		if (sysinfo_it == sysinfos.end()) {
 		    // loop again
 		} else {
