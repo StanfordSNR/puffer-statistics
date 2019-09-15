@@ -11,6 +11,7 @@
 #include <fstream>
 #include <random>
 #include <algorithm>
+#include <iomanip>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -117,7 +118,7 @@ struct SchemeStats {
 class Statistics {
     vector<double> all_watch_times{};
 
-    SchemeStats puffer{}, pufferbetter{};
+    SchemeStats puffer{};
     SchemeStats mpc{}, robust_mpc{}, pensieve{}, bba{};
 
 public:
@@ -195,7 +196,6 @@ public:
 	    // record stall ratios (as a function of scheme and rounded watch time)
 	    if (scheme == "puffer_ttp_cl/bbr"sv) {
 		puffer.add_sample(watch_time, stall_time);
-		pufferbetter.add_sample(watch_time, stall_time * .9);
 	    } else if (scheme == "mpc/bbr"sv) {
 		mpc.add_sample(watch_time, stall_time);
 	    } else if (scheme == "robust_mpc/bbr"sv) {
@@ -230,7 +230,6 @@ public:
 	constexpr unsigned int iteration_count = 1000;
 
 	vector<double> puffer_stall_ratios;
-	vector<double> pufferbetter_stall_ratios;
 	vector<double> mpc_stall_ratios;
 	vector<double> robust_mpc_stall_ratios;
 	vector<double> pensieve_stall_ratios;
@@ -241,7 +240,7 @@ public:
 		cerr << "sample " << i << "\n";
 	    }
 
-	    SchemeStats puffer_simulated{}, pufferbetter_simulated{};
+	    SchemeStats puffer_simulated{};
 
 	    SchemeStats mpc_simulated{}, robust_mpc_simulated{}, pensieve_simulated{}, bba_simulated{};
 
@@ -254,12 +253,6 @@ public:
 		puffer_simulated.add_sample(puffer_watch, puffer_stall);
 	    }
 	    puffer_stall_ratios.push_back(puffer_simulated.observed_stall_ratio());
-
-	    for (unsigned int i = 0; i < pufferbetter.samples; i++) {
-		const auto [pufferbetter_watch, pufferbetter_stall] = simulate(prng, pufferbetter);
-		pufferbetter_simulated.add_sample(pufferbetter_watch, pufferbetter_stall);
-	    }
-	    pufferbetter_stall_ratios.push_back(pufferbetter_simulated.observed_stall_ratio());
 
 	    for (unsigned int i = 0; i < mpc.samples; i++) {
 		const auto [mpc_watch, mpc_stall] = simulate(prng, mpc);
@@ -288,19 +281,23 @@ public:
 
 	/* report statistics */
 	sort(puffer_stall_ratios.begin(), puffer_stall_ratios.end());
-	sort(pufferbetter_stall_ratios.begin(), pufferbetter_stall_ratios.end());
 	sort(mpc_stall_ratios.begin(), mpc_stall_ratios.end());
 	sort(robust_mpc_stall_ratios.begin(), robust_mpc_stall_ratios.end());
 	sort(pensieve_stall_ratios.begin(), pensieve_stall_ratios.end());
 	sort(bba_stall_ratios.begin(), bba_stall_ratios.end());
 
-	cout << "Puffer stall ratio (95% CI): " << 100 * puffer_stall_ratios[.025 * puffer_stall_ratios.size()] << "% .. " << 100 *puffer_stall_ratios[.975 * puffer_stall_ratios.size()] << "%, median=" << 100 * puffer_stall_ratios[.5 * puffer_stall_ratios.size()] << "%\n";
+	cout << fixed << setprecision(3);
+	cout << "Puffer total considered stall/watch time: " << puffer.total_stall_time << "/" << puffer.total_watch_time << "\n";
+	cout << "MPC-HM total considered stall/watch time: " << mpc.total_stall_time << "/" << mpc.total_watch_time << "\n";
+	cout << "RobustMPC-HM total considered stall/watch time: " << robust_mpc.total_stall_time << "/" << robust_mpc.total_watch_time << "\n";
+	cout << "Pensieve total considered stall/watch time: " << pensieve.total_stall_time << "/" << pensieve.total_watch_time << "\n";
+	cout << "BBA total considered stall/watch time: " << bba.total_stall_time << "/" << bba.total_watch_time << "\n\n";
 
-	cout << "PufferBetter stall ratio (95% CI): " << 100 * pufferbetter_stall_ratios[.025 * pufferbetter_stall_ratios.size()] << "% .. " << 100 *pufferbetter_stall_ratios[.975 * pufferbetter_stall_ratios.size()] << "%, median=" << 100 * pufferbetter_stall_ratios[.5 * pufferbetter_stall_ratios.size()] << "%\n";
+	cout << "Puffer stall ratio (95% CI): " << 100 * puffer_stall_ratios[.025 * puffer_stall_ratios.size()] << "% .. " << 100 *puffer_stall_ratios[.975 * puffer_stall_ratios.size()] << "%, median=" << 100 * puffer_stall_ratios[.5 * puffer_stall_ratios.size()] << "%\n";
 
 	cout << "MPC-HM stall ratio (95% CI): " << 100 * mpc_stall_ratios[.025 * mpc_stall_ratios.size()] << "% .. " << 100 *mpc_stall_ratios[.975 * mpc_stall_ratios.size()] << "%, median=" << 100 * mpc_stall_ratios[.5 * mpc_stall_ratios.size()] << "%\n";
 
-	cout << "Robust_MPC-HM stall ratio (95% CI): " << 100 * robust_mpc_stall_ratios[.025 * robust_mpc_stall_ratios.size()] << "% .. " << 100 *robust_mpc_stall_ratios[.975 * robust_mpc_stall_ratios.size()] << "%, median=" << 100 * robust_mpc_stall_ratios[.5 * robust_mpc_stall_ratios.size()] << "%\n";
+	cout << "RobustMPC-HM stall ratio (95% CI): " << 100 * robust_mpc_stall_ratios[.025 * robust_mpc_stall_ratios.size()] << "% .. " << 100 *robust_mpc_stall_ratios[.975 * robust_mpc_stall_ratios.size()] << "%, median=" << 100 * robust_mpc_stall_ratios[.5 * robust_mpc_stall_ratios.size()] << "%\n";
 
 	cout << "Pensieve stall ratio (95% CI): " << 100 * pensieve_stall_ratios[.025 * pensieve_stall_ratios.size()] << "% .. " << 100 *pensieve_stall_ratios[.975 * pensieve_stall_ratios.size()] << "%, median=" << 100 * pensieve_stall_ratios[.5 * pensieve_stall_ratios.size()] << "%\n";
 
