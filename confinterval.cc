@@ -223,6 +223,17 @@ public:
 	return {simulated_watch_time, simulated_stall_time};
     }
 
+    double simulate_sample( default_random_engine & prng, const SchemeStats & scheme ) {
+	SchemeStats scheme_simulated;
+
+	for ( unsigned int i = 0; i < scheme.samples; i++ ) {
+	    const auto [watch_time, stall_time] = simulate(prng, scheme);
+	    scheme_simulated.add_sample(watch_time, stall_time);	    
+	}
+
+	return scheme_simulated.observed_stall_ratio();
+    }
+
     void do_point_estimate() {
 	random_device rd;
 	default_random_engine prng(rd());
@@ -237,47 +248,16 @@ public:
 
 	for (unsigned int i = 0; i < iteration_count; i++) {
 	    if (i % 10 == 0) {
-		cerr << "sample " << i << "\n";
+		cerr << "\rsample " << i << "/" << iteration_count << "                    ";
 	    }
 
-	    SchemeStats puffer_simulated{};
-
-	    SchemeStats mpc_simulated{}, robust_mpc_simulated{}, pensieve_simulated{}, bba_simulated{};
-
-	    for (unsigned int i = 0; i < puffer.samples; i++) {
-		/* simulate a viewer watching for some amount (drawn from the global distribution),
-		   and then seeing a stall ratio (drawn from the scheme's distribution of stall ratios
-		   from nearby watch times) */
-
-		const auto [puffer_watch, puffer_stall] = simulate(prng, puffer);
-		puffer_simulated.add_sample(puffer_watch, puffer_stall);
-	    }
-	    puffer_stall_ratios.push_back(puffer_simulated.observed_stall_ratio());
-
-	    for (unsigned int i = 0; i < mpc.samples; i++) {
-		const auto [mpc_watch, mpc_stall] = simulate(prng, mpc);
-		mpc_simulated.add_sample(mpc_watch, mpc_stall);
-	    }
-	    mpc_stall_ratios.push_back(mpc_simulated.observed_stall_ratio());
-
-	    for (unsigned int i = 0; i < robust_mpc.samples; i++) {
-		const auto [robust_mpc_watch, robust_mpc_stall] = simulate(prng, robust_mpc);
-		robust_mpc_simulated.add_sample(robust_mpc_watch, robust_mpc_stall);
-	    }
-	    robust_mpc_stall_ratios.push_back(robust_mpc_simulated.observed_stall_ratio());
-
-	    for (unsigned int i = 0; i < pensieve.samples; i++) {
-		const auto [pensieve_watch, pensieve_stall] = simulate(prng, pensieve);
-		pensieve_simulated.add_sample(pensieve_watch, pensieve_stall);
-	    }
-	    pensieve_stall_ratios.push_back(pensieve_simulated.observed_stall_ratio());
-
-	    for (unsigned int i = 0; i < bba.samples; i++) {
-		const auto [bba_watch, bba_stall] = simulate(prng, bba);
-		bba_simulated.add_sample(bba_watch, bba_stall);
-	    }
-	    bba_stall_ratios.push_back(bba_simulated.observed_stall_ratio());
+	    puffer_stall_ratios.push_back(simulate_sample(prng, puffer));
+	    mpc_stall_ratios.push_back(simulate_sample(prng, mpc));
+	    robust_mpc_stall_ratios.push_back(simulate_sample(prng, robust_mpc));
+	    pensieve_stall_ratios.push_back(simulate_sample(prng, pensieve));
+	    bba_stall_ratios.push_back(simulate_sample(prng, bba));
 	}
+	cerr << "\n";
 
 	/* report statistics */
 	sort(puffer_stall_ratios.begin(), puffer_stall_ratios.end());
