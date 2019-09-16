@@ -184,17 +184,18 @@ public:
 	    }
 
 	    split_on_char(line, ' ', fields);
-	    if (fields.size() != 15) {
+	    if (fields.size() != 17) {
 		throw runtime_error("Bad line: " + line_storage);
 	    }
 
 	    const auto & [ts_str, goodbad, fulltrunc, scheme, ip, os, channelchange, init_id,
-			  extent, usedpct, mean_ssim, mean_delivery_rate, startup_delay, time_after_startup,
+			  extent, usedpct, mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation_db,
+			  startup_delay, time_after_startup,
 			  time_stalled]
 		= tie(fields[0], fields[1], fields[2], fields[3],
 		      fields[4], fields[5], fields[6], fields[7],
 		      fields[8], fields[9], fields[10], fields[11],
-		      fields[12], fields[13], fields[14]);
+		      fields[12], fields[13], fields[14], fields[15], fields[16]);
 
 	    const uint64_t ts = to_uint64(ts_str);
 
@@ -204,6 +205,17 @@ public:
 	    } else {
 		continue;
 	    }
+
+	    /*
+	    split_on_char(mean_delivery_rate, '=', scratch);
+	    if (scratch[0] != "mean_delivery_rate"sv) {
+		throw runtime_error("field mismatch");
+	    }
+	    const double delivery_rate = to_double(scratch[1]);
+	    if (delivery_rate > (6000000.0/8.0)) {
+		continue;
+	    }
+	    */
 
 	    split_on_char(time_after_startup, '=', scratch);
 	    if (scratch[0] != "total_after_startup"sv) {
@@ -265,10 +277,14 @@ public:
 	unsigned int simulated_watch_time_binned = SchemeStats::watch_time_bin(simulated_watch_time);
 	size_t num_stall_ratio_samples = scheme.binned_stall_ratios.at(simulated_watch_time_binned).size();
 
-	uniform_int_distribution<> possible_stall_ratio_index(0, num_stall_ratio_samples - 1);
-	const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(possible_stall_ratio_index(prng));
+	if (num_stall_ratio_samples > 0) {
+	    uniform_int_distribution<> possible_stall_ratio_index(0, num_stall_ratio_samples - 1);
+	    const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(possible_stall_ratio_index(prng));
 
-	return {simulated_watch_time, simulated_stall_time};
+	    return {simulated_watch_time, simulated_stall_time};
+	} else {
+	    return {simulated_watch_time, 0};
+	}
     }
 
     static double simulate_realization( const vector<double> & all_watch_times,
