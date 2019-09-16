@@ -854,7 +854,7 @@ public:
 	    const float relative_time = (ts - base_time) / 1000000000.0;
 
 	    if (relative_time - last_sample > 8.0) {
-		ret.bad_reason = "timer_interval>8s";
+		ret.bad_reason = "event_interval>8s";
 		ret.full_extent = false;
 		break;
 	    }
@@ -871,7 +871,8 @@ public:
 		if (relative_time - time_low_buffer_started.value() > 20) {
 		    // very long rebuffer
 		    ret.bad_reason = "stall>20s";
-		    return ret;
+		    ret.full_extent = false;
+		    break;
 		}
 	    }
 
