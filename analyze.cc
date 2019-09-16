@@ -326,6 +326,73 @@ struct Sysinfo {
     }
 };
 
+struct VideoSent {
+    optional<float> ssim_index{};
+    optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, user_id{};
+
+    bool bad = false;
+
+    bool complete() const {
+	return ssim_index and delivery_rate and expt_id and init_id and user_id;
+    }
+
+    bool operator==(const VideoSent & other) const {
+	return ssim_index == other.ssim_index
+	    and delivery_rate == other.delivery_rate
+	    and expt_id == other.expt_id
+	    and init_id == other.init_id
+	    and user_id == other.user_id;
+    }
+
+    bool operator!=(const VideoSent & other) const { return not operator==(other); }
+
+    template <typename T>
+    void set_unique( optional<T> & field, const T & value ) {
+	if (not field.has_value()) {
+	    field.emplace(value);
+	} else {
+	    if (field.value() != value) {
+		if (not bad) {
+		    bad = true;
+		    cerr << "error trying to set contradictory sysinfo value: ";
+		    cerr << "init_id=" << init_id.value_or(-1)
+			 << ", expt_id=" << expt_id.value_or(-1)
+			 << ", user_id=" << user_id.value_or(-1)
+			 << ", ssim_index=" << ssim_index.value_or(-1)
+			 << ", delivery_rate=" << delivery_rate.value_or(-1)
+			 << "\n";
+		}
+		//		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+	    }
+	}
+    }
+
+    void insert_unique(const string_view key, const string_view value,
+		       string_table & usernames ) {
+	if (key == "init_id"sv) {
+	    set_unique( init_id, influx_integer<uint32_t>( value ) );
+	} else if (key == "expt_id"sv) {
+	    set_unique( expt_id, influx_integer<uint32_t>( value ) );
+	} else if (key == "user"sv) {
+	    if (value.size() <= 2 or value.front() != '"' or value.back() != '"') {
+		throw runtime_error("invalid username string: " + string(value));
+	    }
+	    set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
+	} else if (key == "ssim_index"sv) {
+	    set_unique( ssim_index, to_float(value) );
+	} else if (key == "delivery_rate"sv) {
+	    set_unique( delivery_rate, influx_integer<uint32_t>( value ) );
+	} else if (key == "buffer"sv or key == "cum_rebuffer"sv
+		   or key == "cwnd"sv or key == "format"sv or key == "in_flight"sv
+		   or key == "min_rtt"sv or key == "rtt"sv or key == "size"sv
+		   or key == "video_ts"sv) {
+	    // ignore
+	} else {
+	    throw runtime_error( "unknown key: " + string(key) );
+	}
+    }
+};
+
 struct Channel {
     constexpr static uint8_t COUNT = 6;
 
@@ -368,6 +435,7 @@ Channel get_channel(const vector<string_view> & fields) {
 
 using event_table = map<uint64_t, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
+using video_sent_table = map<uint64_t, VideoSent>;
 
 class Parser {
 private:
@@ -377,6 +445,7 @@ private:
 
     array<array<event_table, Channel::COUNT>, SERVER_COUNT> client_buffer{};
     array<sysinfo_table, SERVER_COUNT> client_sysinfo{};
+    array<array<video_sent_table, Channel::COUNT>, SERVER_COUNT> video_sent{};
 
     using session_key = tuple<uint32_t, uint32_t, uint32_t, uint8_t, uint8_t>;
     /*                        init_id,  uid,      expt_id,  server,  channel */
@@ -385,6 +454,8 @@ private:
     using sysinfo_key = tuple<uint32_t, uint32_t, uint32_t>;
     /*                        init_id,  uid,      expt_id */
     dense_hash_map<sysinfo_key, Sysinfo, boost::hash<sysinfo_key>> sysinfos;
+
+    dense_hash_map<session_key, vector<pair<uint64_t, const VideoSent*>>, boost::hash<session_key>> chunks;
 
     unsigned int bad_count = 0;
 
@@ -429,10 +500,11 @@ private:
 
 public:
     Parser(const string & experiment_dump_filename)
-	: sessions(), sysinfos()
+	: sessions(), sysinfos(), chunks()
     {
 	sessions.set_empty_key({0,0,0,-1,-1});
 	sysinfos.set_empty_key({0,0,0});
+	chunks.set_empty_key({0,0,0,-1,-1});
 
 	usernames.forward_map_vivify("unknown");
 	browsers.forward_map_vivify("unknown");
@@ -530,7 +602,9 @@ public:
 		} else if ( measurement == "video_acked"sv ) {
 		    //		video_acked[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
 		} else if ( measurement == "video_sent"sv ) {
-		    //		video_sent[get_server_id(measurement_tag_set_fields)][timestamp].insert_unique(key, value);
+		    const auto server_id = get_server_id(measurement_tag_set_fields);
+		    const auto channel = get_channel(measurement_tag_set_fields);
+		    video_sent[server_id][channel][timestamp].insert_unique(key, value, usernames);
 		} else if ( measurement == "video_size"sv ) {
 		    // skip
 		} else {
@@ -592,6 +666,27 @@ public:
 	}
     }
 
+    void accumulate_video_sents() {
+	for (uint8_t server = 0; server < client_buffer.size(); server++) {
+	    const size_t rss = memcheck() / 1024;
+	    cerr << "video_sent_server " << int(server) << "/" << video_sent.size() << ", RSS=" << rss << " MiB\n";
+	    for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
+		for (const auto & [ts,event] : video_sent[server][channel]) {
+		    if (event.bad) {
+			bad_count++;
+			cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
+			continue;
+		    }
+		    if (not event.complete()) {
+			throw runtime_error("incomplete event with timestamp " + to_string(ts));
+		    }
+
+		    chunks[{*event.init_id, *event.user_id, *event.expt_id, server, channel}].emplace_back(ts, &event);
+		}
+	    }
+	}
+    }
+
     struct EventSummary {
 	uint64_t base_time{0};
 	bool valid{false};
@@ -616,8 +711,10 @@ public:
 	unsigned int good_and_full=0;
 
 	unsigned int missing_sysinfo = 0;
+	unsigned int missing_video_stats = 0;
 
 	for ( auto & [key, events] : sessions ) {
+	    /* find matching Sysinfo */
 	    Sysinfo sysinfo{0,0,0,0,0,0};
 	    int channel_changes = -1;
 	    for ( unsigned int decrement = 0; decrement < 1024; decrement++ ) {
@@ -639,11 +736,22 @@ public:
 
 	    const EventSummary summary = summarize(key, events);
 
+	    /* find matching videosent stream */
+	    const auto [mean_ssim, mean_delivery_rate] = video_summarize(key);
+
+	    if (mean_delivery_rate < 0 ) {
+		missing_video_stats++;
+	    }
+
+	    cout << fixed;
+
 	    cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " )
 		 << summary.scheme << " " << inet_ntoa({sysinfo.ip.value()})
 		 << " " << ostable.reverse_map(sysinfo.os.value())
 		 << " " << channel_changes << " init=" << summary.init_id << " extent=" << summary.time_extent
-		 << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "% "
+		 << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
+		 << " mean_ssim=" << mean_ssim
+		 << " mean_delivery_rate=" << mean_delivery_rate
 		 << " startup_delay=" << summary.cum_rebuf_at_startup
 		 << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
 		 << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) << "\n";
@@ -663,8 +771,27 @@ public:
 	    }
 	}
 
-	cout << "num_sessions=" << sessions.size() << " good=" << good_sessions << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " had_stall=" << had_stall << "\n";
+	cout << "num_sessions=" << sessions.size() << " good=" << good_sessions << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " missing_video_stats=" << missing_video_stats << " had_stall=" << had_stall << "\n";
 	cout << "total_extent=" << total_extent / 3600.0 << " total_time_after_startup=" << total_time_after_startup / 3600.0 << " total_stall_time=" << total_stall_time / 3600.0 << "\n";
+    }
+
+    pair<double, double> video_summarize(const session_key & key) const {
+	const auto videosent_it = chunks.find(key);
+	if (videosent_it == chunks.end()) {
+	    return { -1, -1 };
+	}
+
+	double ssim_sum = 0;
+	double delivery_rate_sum = 0;
+
+	const vector<pair<uint64_t, const VideoSent *>> & chunk_stream = videosent_it->second;
+
+	for ( const auto [ts, videosent] : chunk_stream ) {
+	    ssim_sum += videosent->ssim_index.value();
+	    delivery_rate_sum += videosent->delivery_rate.value();
+	}
+
+	return { ssim_sum / chunk_stream.size(), delivery_rate_sum / chunk_stream.size() };
     }
 
     EventSummary summarize(const session_key & key, const vector<pair<uint64_t, const Event*>> & events) const {
@@ -781,6 +908,7 @@ void analyze_main(const string & experiment_dump_filename) {
     parser.parse_stdin();
     parser.accumulate_sessions();
     parser.accumulate_sysinfos();
+    parser.accumulate_video_sents();
     parser.analyze_sessions();
 }
 
