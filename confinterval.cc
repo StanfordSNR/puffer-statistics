@@ -196,7 +196,7 @@ class Statistics {
     vector<double> all_watch_times{};
 
     SchemeStats puffer{};
-    SchemeStats mpc{}, robust_mpc{}, pensieve{}, bba{};
+    SchemeStats feb{}, march{}, april{}, may{};
 
 public:
     void parse_stdin() {
@@ -243,9 +243,8 @@ public:
 
 	    const uint64_t ts = to_uint64(ts_str);
 
-	    if ((ts >= 1547884800 and ts < 1565193009) or (ts > 1567206883)) {
-		// analyze this period: January 19-August 7, and August 30 onward
-		// this is the primary study period
+	    if ((ts >= 1565193009) and (ts <= 1567206883)) {
+		// analyze this period: August 7--August 30
 	    } else {
 		continue;
 	    }
@@ -300,14 +299,14 @@ public:
 	    SchemeStats *the_scheme = nullptr;
 	    if (scheme == "puffer_ttp_cl/bbr"sv) {
 		the_scheme = &puffer;
-	    } else if (scheme == "mpc/bbr"sv) {
-		the_scheme = &mpc;
-	    } else if (scheme == "robust_mpc/bbr"sv) {
-		the_scheme = &robust_mpc;
-	    } else if (scheme == "pensieve/bbr"sv) {
-		the_scheme = &pensieve;
-	    } else if (scheme == "linear_bba/bbr"sv) {
-		the_scheme = &bba;
+	    } else if (scheme == "puffer_ttp_20190202/bbr"sv) {
+		the_scheme = &feb;
+	    } else if (scheme == "puffer_ttp_20190302/bbr"sv) {
+		the_scheme = &march;
+	    } else if (scheme == "puffer_ttp_20190402/bbr"sv) {
+		the_scheme = &april;
+	    } else if (scheme == "puffer_ttp_20190502/bbr"sv) {
+		the_scheme = &may;
 	    }
 
 	    if (the_scheme) {
@@ -409,10 +408,10 @@ public:
 
 	constexpr unsigned int iteration_count = 10000;
 	Realizations puffer_r{"Puffer", puffer};
-	Realizations mpc_r{"MPC-HM", mpc};
-	Realizations robust_mpc_r{"RobustMPC-HM", robust_mpc};
-	Realizations pensieve_r{"Pensieve", pensieve};
-	Realizations bba_r{"BBA", bba};
+	Realizations feb_r{"Puffer-February", feb};
+	Realizations march_r{"Puffer-March", march};
+	Realizations april_r{"Puffer-April", april};
+	Realizations may_r{"Puffer-May", may};
 
 	for (unsigned int i = 0; i < iteration_count; i++) {
 	    if (i % 10 == 0) {
@@ -420,25 +419,25 @@ public:
 	    }
 
 	    puffer_r.add_realization(all_watch_times, prng);
-	    mpc_r.add_realization(all_watch_times, prng);
-	    robust_mpc_r.add_realization(all_watch_times, prng);
-	    pensieve_r.add_realization(all_watch_times, prng);
-	    bba_r.add_realization(all_watch_times, prng);
+	    feb_r.add_realization(all_watch_times, prng);
+	    march_r.add_realization(all_watch_times, prng);
+	    april_r.add_realization(all_watch_times, prng);
+	    may_r.add_realization(all_watch_times, prng);
 	}
 	cerr << "\n";
 
 	/* report statistics */
 	puffer_r.print_samplesize();
-	mpc_r.print_samplesize();
-	robust_mpc_r.print_samplesize();
-	pensieve_r.print_samplesize();
-	bba_r.print_samplesize();
+	feb_r.print_samplesize();
+	march_r.print_samplesize();
+	april_r.print_samplesize();
+	may_r.print_samplesize();
 
 	puffer_r.print_summary();
-	mpc_r.print_summary();
-	robust_mpc_r.print_summary();
-	pensieve_r.print_summary();
-	bba_r.print_summary();
+	feb_r.print_summary();
+	march_r.print_summary();
+	april_r.print_summary();
+	may_r.print_summary();
     }
 };
 
