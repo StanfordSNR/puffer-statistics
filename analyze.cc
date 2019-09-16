@@ -707,6 +707,8 @@ public:
 
 	string scheme{};
 	uint32_t init_id{};
+
+	string bad_reason{};
     };
 
     void analyze_sessions() const {
@@ -753,7 +755,7 @@ public:
 
 	    cout << fixed;
 
-	    cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " )
+	    cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
 		 << summary.scheme << " " << inet_ntoa({sysinfo.ip.value()})
 		 << " " << ostable.reverse_map(sysinfo.os.value())
 		 << " " << channel_changes << " init=" << summary.init_id << " extent=" << summary.time_extent
@@ -828,6 +830,7 @@ public:
 	EventSummary ret;
 	ret.scheme = experiments.at(expt_id);
 	ret.init_id = init_id;
+	ret.bad_reason = "good";
 
 	const uint64_t base_time = events.front().first;
 	ret.base_time = base_time;
@@ -851,6 +854,7 @@ public:
 	    const float relative_time = (ts - base_time) / 1000000000.0;
 
 	    if (relative_time - last_sample > 8.0) {
+		ret.bad_reason = "timer_interval>8s";
 		ret.full_extent = false;
 		break;
 	    }
@@ -866,6 +870,7 @@ public:
 	    if (time_low_buffer_started.has_value()) {
 		if (relative_time - time_low_buffer_started.value() > 20) {
 		    // very long rebuffer
+		    ret.bad_reason = "stall>20s";
 		    return ret;
 		}
 	    }
@@ -873,6 +878,7 @@ public:
 	    if (event->buffer.value() > 5 and last_buffer > 5) {
 		if (event->cum_rebuf.value() > last_cum_rebuf + 0.15) {
 		    // stall with plenty of buffer --> slow decoder?
+		    ret.bad_reason = "stall_while_playing";
 		    return ret;
 		}
 	    }
@@ -913,14 +919,17 @@ public:
 	}
 
 	if (ret.time_at_last_play <= ret.time_at_startup) {
+	    ret.bad_reason = "zeroplayed";
 	    return ret;
 	}
 
 	if (ret.cum_rebuf_at_last_play < ret.cum_rebuf_at_startup) {
+	    ret.bad_reason = "negative_rebuffer";
 	    return ret;
 	}
 
 	if (not started) {
+	    ret.bad_reason = "neverstarted";
 	    return ret;
 	}
 

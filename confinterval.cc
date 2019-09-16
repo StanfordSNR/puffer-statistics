@@ -184,18 +184,18 @@ public:
 	    }
 
 	    split_on_char(line, ' ', fields);
-	    if (fields.size() != 17) {
+	    if (fields.size() != 18) {
 		throw runtime_error("Bad line: " + line_storage);
 	    }
 
-	    const auto & [ts_str, goodbad, fulltrunc, scheme, ip, os, channelchange, init_id,
+	    const auto & [ts_str, goodbad, fulltrunc, badreason, scheme, ip, os, channelchange, init_id,
 			  extent, usedpct, mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation_db,
 			  startup_delay, time_after_startup,
 			  time_stalled]
 		= tie(fields[0], fields[1], fields[2], fields[3],
 		      fields[4], fields[5], fields[6], fields[7],
 		      fields[8], fields[9], fields[10], fields[11],
-		      fields[12], fields[13], fields[14], fields[15], fields[16]);
+		      fields[12], fields[13], fields[14], fields[15], fields[16], fields[17]);
 
 	    const uint64_t ts = to_uint64(ts_str);
 
