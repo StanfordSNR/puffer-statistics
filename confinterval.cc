@@ -87,6 +87,10 @@ double to_double(const string_view str) {
     return ret;
 }
 
+double raw_ssim_to_db(const double raw_ssim) {
+    return -10.0 * log10( 1 - raw_ssim );
+}
+
 struct SchemeStats {
     array<vector<double>, 32> binned_stall_ratios{};
 
@@ -94,8 +98,7 @@ struct SchemeStats {
     double total_watch_time = 0;
     double total_stall_time = 0;    
 
-    double total_ssim = 0;
-    double total_ssim_time = 0;
+    vector<double> ssim_samples{};
 
     static unsigned int watch_time_bin(const double raw_watch_time) {
 	const int watch_time_bin = lrintf(floorf(log2(raw_watch_time)));
@@ -113,12 +116,11 @@ struct SchemeStats {
 	total_stall_time += stall_time;
     }
 
-    void add_ssim_sample(const double watch_time, const double mean_ssim) {
+    void add_ssim_sample(const double mean_ssim) {
 	if (mean_ssim <= 0 or mean_ssim > 1) {
 	    throw runtime_error("invalid ssim: " + to_string(mean_ssim));
 	}
-	total_ssim += watch_time * mean_ssim;
-	total_ssim_time += watch_time;
+	ssim_samples.push_back(mean_ssim);
     }
 
     double observed_stall_ratio() const {
@@ -126,7 +128,23 @@ struct SchemeStats {
     }
 
     double mean_ssim() const {
-	return total_ssim / total_ssim_time;
+	return accumulate(ssim_samples.begin(), ssim_samples.end(), 0.0) / ssim_samples.size();
+    }
+
+    double stddev_ssim() const {
+	const double mean = mean_ssim();
+	double ssr = 0;
+	for ( const auto x : ssim_samples ) {
+	    ssr += (x - mean) * (x - mean);
+	}
+	const double variance = (1.0 / (ssim_samples.size() - 1)) * ssr;
+	return sqrt(variance);
+    }
+
+    tuple<double, double, double> sem_ssim() const {
+	const double mean = mean_ssim();
+	const double sem = stddev_ssim() / sqrt(ssim_samples.size());
+	return { raw_ssim_to_db( mean - 2 * sem ), raw_ssim_to_db( mean ), raw_ssim_to_db( mean + 2 * sem ) };
     }
 };
 
@@ -219,19 +237,19 @@ public:
 	    // record stall ratios (as a function of scheme and rounded watch time)
 	    if (scheme == "puffer_ttp_cl/bbr"sv) {
 		puffer.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val > 0 ) { puffer.add_ssim_sample(watch_time, mean_ssim_val); }
+		if ( mean_ssim_val >= 0 ) { puffer.add_ssim_sample(mean_ssim_val); }
 	    } else if (scheme == "mpc/bbr"sv) {
 		mpc.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val > 0 ) { mpc.add_ssim_sample(watch_time, mean_ssim_val); }
+		if ( mean_ssim_val >= 0 ) { mpc.add_ssim_sample(mean_ssim_val); }
 	    } else if (scheme == "robust_mpc/bbr"sv) {
 		robust_mpc.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val > 0 ) { robust_mpc.add_ssim_sample(watch_time, mean_ssim_val); }
+		if ( mean_ssim_val >= 0 ) { robust_mpc.add_ssim_sample(mean_ssim_val); }
 	    } else if (scheme == "pensieve/bbr"sv) {
 		pensieve.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val > 0 ) { pensieve.add_ssim_sample(watch_time, mean_ssim_val); }
+		if ( mean_ssim_val >= 0 ) { pensieve.add_ssim_sample(mean_ssim_val); }
 	    } else if (scheme == "linear_bba/bbr"sv) {
 		bba.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val > 0 ) { bba.add_ssim_sample(watch_time, mean_ssim_val); }
+		if ( mean_ssim_val >= 0 ) { bba.add_ssim_sample(mean_ssim_val); }
 	    }
 	}
     }
@@ -293,14 +311,15 @@ public:
 
 	void print_samplesize() const {
 	    cout << fixed << setprecision(3);
-	    cout << _name << " considered " << _scheme_sample.samples << " sessions, stall/watch hours: " << _scheme_sample.total_stall_time / 3600.0 << "/" << _scheme_sample.total_watch_time / 3600.0 << "\n";
+	    cout << "#" << _name << " considered " << _scheme_sample.samples << " sessions, stall/watch hours: " << _scheme_sample.total_stall_time / 3600.0 << "/" << _scheme_sample.total_watch_time / 3600.0 << "\n";
 	}
 
 	void print_summary() {
 	    const auto [ lower_limit, mean, upper_limit ] = stats();
+	    const auto [ lower_ssim_limit, mean_ssim, upper_ssim_limit ] = _scheme_sample.sem_ssim();
 
-	    cout << fixed << setprecision(3);
-	    cout << _name << " stall ratio (95% CI): " << 100 * lower_limit << "% .. " << 100 * upper_limit << "%, mean=" << 100 * mean << "\n";
+	    cout << fixed << setprecision(8);
+	    cout << _name << " stall ratio (95% CI): " << 100 * lower_limit << "% .. " << 100 * upper_limit << "%, mean= " << 100 * mean << "; SSIM (95% CI): " << lower_ssim_limit << " .. " << upper_ssim_limit << ", mean= " << mean_ssim << "\n";
 	}
     };
 
@@ -308,7 +327,7 @@ public:
 	random_device rd;
 	default_random_engine prng(rd());
 
-	constexpr unsigned int iteration_count = 1000;
+	constexpr unsigned int iteration_count = 10000;
 	Realizations puffer_r{"Puffer", puffer};
 	Realizations mpc_r{"MPC-HM", mpc};
 	Realizations robust_mpc_r{"RobustMPC-HM", robust_mpc};
