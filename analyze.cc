@@ -328,7 +328,7 @@ struct Sysinfo {
 
 struct VideoSent {
     optional<float> ssim_index{};
-    optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, user_id{};
+    optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, user_id{}, size{};
 
     bool bad = false;
 
@@ -341,7 +341,8 @@ struct VideoSent {
 	    and delivery_rate == other.delivery_rate
 	    and expt_id == other.expt_id
 	    and init_id == other.init_id
-	    and user_id == other.user_id;
+	    and user_id == other.user_id
+	    and size == other.size;
     }
 
     bool operator!=(const VideoSent & other) const { return not operator==(other); }
@@ -360,6 +361,7 @@ struct VideoSent {
 			 << ", user_id=" << user_id.value_or(-1)
 			 << ", ssim_index=" << ssim_index.value_or(-1)
 			 << ", delivery_rate=" << delivery_rate.value_or(-1)
+			 << ", size=" << size.value_or(-1)
 			 << "\n";
 		}
 		//		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
@@ -382,9 +384,11 @@ struct VideoSent {
 	    set_unique( ssim_index, to_float(value) );
 	} else if (key == "delivery_rate"sv) {
 	    set_unique( delivery_rate, influx_integer<uint32_t>( value ) );
+	} else if (key == "size"sv) {
+	    set_unique( size, influx_integer<uint32_t>( value ) );
 	} else if (key == "buffer"sv or key == "cum_rebuffer"sv
 		   or key == "cwnd"sv or key == "format"sv or key == "in_flight"sv
-		   or key == "min_rtt"sv or key == "rtt"sv or key == "size"sv
+		   or key == "min_rtt"sv or key == "rtt"sv
 		   or key == "video_ts"sv) {
 	    // ignore
 	} else {
@@ -436,6 +440,10 @@ Channel get_channel(const vector<string_view> & fields) {
 using event_table = map<uint64_t, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
 using video_sent_table = map<uint64_t, VideoSent>;
+
+double raw_ssim_to_db(const double raw_ssim) {
+    return -10.0 * log10( 1 - raw_ssim );
+}
 
 class Parser {
 private:
@@ -737,7 +745,7 @@ public:
 	    const EventSummary summary = summarize(key, events);
 
 	    /* find matching videosent stream */
-	    const auto [mean_ssim, mean_delivery_rate] = video_summarize(key);
+	    const auto [mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation] = video_summarize(key);
 
 	    if (mean_delivery_rate < 0 ) {
 		missing_video_stats++;
@@ -752,6 +760,8 @@ public:
 		 << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
 		 << " mean_ssim=" << mean_ssim
 		 << " mean_delivery_rate=" << mean_delivery_rate
+		 << " average_bitrate=" << average_bitrate
+		 << " ssim_variation_db=" << ssim_variation
 		 << " startup_delay=" << summary.cum_rebuf_at_startup
 		 << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
 		 << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) << "\n";
@@ -775,23 +785,41 @@ public:
 	cout << "total_extent=" << total_extent / 3600.0 << " total_time_after_startup=" << total_time_after_startup / 3600.0 << " total_stall_time=" << total_stall_time / 3600.0 << "\n";
     }
 
-    pair<double, double> video_summarize(const session_key & key) const {
+    tuple<double, double, double, double> video_summarize(const session_key & key) const {
 	const auto videosent_it = chunks.find(key);
 	if (videosent_it == chunks.end()) {
-	    return { -1, -1 };
+	    return { -1, -1, -1, -1 };
 	}
 
 	double ssim_sum = 0;
 	double delivery_rate_sum = 0;
+	double bytes_sent_sum = 0;
+	optional<double> ssim_last{};
+	double ssim_absolute_variation_sum = 0;
 
 	const vector<pair<uint64_t, const VideoSent *>> & chunk_stream = videosent_it->second;
 
 	for ( const auto [ts, videosent] : chunk_stream ) {
 	    ssim_sum += videosent->ssim_index.value();
+
+	    if (ssim_last.has_value()) {
+		ssim_absolute_variation_sum += abs(raw_ssim_to_db(videosent->ssim_index.value()) - raw_ssim_to_db(ssim_last.value()));
+	    }
+
+	    ssim_last.emplace(videosent->ssim_index.value());
+
 	    delivery_rate_sum += videosent->delivery_rate.value();
+	    bytes_sent_sum += videosent->size.value();
 	}
 
-	return { ssim_sum / chunk_stream.size(), delivery_rate_sum / chunk_stream.size() };
+	const double average_bitrate = 8 * bytes_sent_sum / (2.002 * chunk_stream.size());
+
+	double average_absolute_ssim_variation = -1;
+	if (chunk_stream.size() > 1) {
+	    average_absolute_ssim_variation = ssim_absolute_variation_sum / (chunk_stream.size() - 1);
+	}
+
+	return { ssim_sum / chunk_stream.size(), delivery_rate_sum / chunk_stream.size(), average_bitrate, average_absolute_ssim_variation };
     }
 
     EventSummary summarize(const session_key & key, const vector<pair<uint64_t, const Event*>> & events) const {
