@@ -94,6 +94,9 @@ struct SchemeStats {
     double total_watch_time = 0;
     double total_stall_time = 0;    
 
+    double total_ssim = 0;
+    double total_ssim_time = 0;
+
     static unsigned int watch_time_bin(const double raw_watch_time) {
 	const int watch_time_bin = lrintf(floorf(log2(raw_watch_time)));
 	if (watch_time_bin < 2 or watch_time_bin > 20) {
@@ -107,11 +110,23 @@ struct SchemeStats {
 
 	samples++;
 	total_watch_time += watch_time;
-	total_stall_time += stall_time;	
+	total_stall_time += stall_time;
+    }
+
+    void add_ssim_sample(const double watch_time, const double mean_ssim) {
+	if (mean_ssim <= 0 or mean_ssim > 1) {
+	    throw runtime_error("invalid ssim: " + to_string(mean_ssim));
+	}
+	total_ssim += watch_time * mean_ssim;
+	total_ssim_time += watch_time;
     }
 
     double observed_stall_ratio() const {
 	return total_stall_time / total_watch_time;
+    }
+
+    double mean_ssim() const {
+	return total_ssim / total_ssim_time;
     }
 };
 
@@ -146,22 +161,22 @@ public:
 		continue;
 	    }
 
-	    if (line.size() > numeric_limits<uint8_t>::max()) {
+	    if (line.size() > 500) {
 		throw runtime_error("Line " + to_string(line_no) + " too long");
 	    }
 
 	    split_on_char(line, ' ', fields);
-	    if (fields.size() != 13) {
+	    if (fields.size() != 15) {
 		throw runtime_error("Bad line: " + line_storage);
 	    }
 
 	    const auto & [ts_str, goodbad, fulltrunc, scheme, ip, os, channelchange, init_id,
-			  extent, usedpct, startup_delay, time_after_startup,
+			  extent, usedpct, mean_ssim, mean_delivery_rate, startup_delay, time_after_startup,
 			  time_stalled]
 		= tie(fields[0], fields[1], fields[2], fields[3],
 		      fields[4], fields[5], fields[6], fields[7],
 		      fields[8], fields[9], fields[10], fields[11],
-		      fields[12]);
+		      fields[12], fields[13], fields[14]);
 
 	    const uint64_t ts = to_uint64(ts_str);
 
@@ -193,17 +208,30 @@ public:
 
 	    const double stall_time = to_double(scratch[1]);
 
+	    // record ssim if available
+	    split_on_char(mean_ssim, '=', scratch);
+	    if (scratch[0] != "mean_ssim"sv) {
+		throw runtime_error("ssim field mismatch");
+	    }
+
+	    const double mean_ssim_val = to_double(scratch[1]);
+
 	    // record stall ratios (as a function of scheme and rounded watch time)
 	    if (scheme == "puffer_ttp_cl/bbr"sv) {
 		puffer.add_sample(watch_time, stall_time);
+		if ( mean_ssim_val > 0 ) { puffer.add_ssim_sample(watch_time, mean_ssim_val); }
 	    } else if (scheme == "mpc/bbr"sv) {
 		mpc.add_sample(watch_time, stall_time);
+		if ( mean_ssim_val > 0 ) { mpc.add_ssim_sample(watch_time, mean_ssim_val); }
 	    } else if (scheme == "robust_mpc/bbr"sv) {
 		robust_mpc.add_sample(watch_time, stall_time);
+		if ( mean_ssim_val > 0 ) { robust_mpc.add_ssim_sample(watch_time, mean_ssim_val); }
 	    } else if (scheme == "pensieve/bbr"sv) {
 		pensieve.add_sample(watch_time, stall_time);
+		if ( mean_ssim_val > 0 ) { pensieve.add_ssim_sample(watch_time, mean_ssim_val); }
 	    } else if (scheme == "linear_bba/bbr"sv) {
 		bba.add_sample(watch_time, stall_time);
+		if ( mean_ssim_val > 0 ) { bba.add_ssim_sample(watch_time, mean_ssim_val); }
 	    }
 	}
     }
