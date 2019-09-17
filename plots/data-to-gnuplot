@@ -1,0 +1,53 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+print <<'END';
+set xlabel "Time spent stalled (%)" 
+set xlabel  offset character 0, 0.5, 0 font "" textcolor lt -1 norotate
+set xrange [ 0.295000 : 0.0850000 ] reverse writeback
+set ylabel "Average SSIM (dB)" 
+set ylabel  offset character 3, 0, 0 font "" textcolor lt -1 rotate
+set yrange [ 14.2000 : 16.3000 ] noreverse writeback
+set border 3 front lt black linewidth 1.000 dashtype solid
+set xtics border out scale 0.5,0.5 nomirror norotate  autojustify
+set ytics border out scale 0.5,0.5 nomirror norotate  autojustify
+set font "Times,10"
+unset key
+set noclip
+END
+
+my $n = 0;
+
+my @colors = qw[0 000075 800000 911eb4 469990 9a6324 a9a9a9];
+
+my @labels;
+
+while (<>) {
+  chomp;
+  next if m{^#};
+  $n++;
+  s{%}{}g;
+  s{;}{}g;
+  s{,}{}g;
+  my ($name, $stall_low, $stall_high, $stall_mean, $ssim_low, $ssim_high, $ssim_mean) = (split)[0,5,7,9,13,15,17];
+
+  print qq{set object $n polygon from };
+  print qq{$stall_low,$ssim_mean to };
+  print qq{$stall_mean,$ssim_high to };
+  print qq{$stall_high,$ssim_mean to };
+  print qq{$stall_mean,$ssim_low to };
+  print qq{$stall_low,$ssim_mean\n};
+
+  my $color = q{#} . $colors[$n];
+
+  print qq{set object $n noclip fc rgb '${color}' fillstyle solid lw 0 dt (0.000001,10000000)\n};
+
+  my $offset_pos = $ssim_high + 0.028;
+  push @labels, qq{$stall_mean $offset_pos "$name"};
+}
+
+print qq{set terminal "svg" font "Times,20"\n};
+print qq{plot '-' with labels\n};
+print join qq{\n}, @labels;
+print qq{\ne\n};
