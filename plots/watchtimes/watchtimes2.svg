@@ -195,9 +195,9 @@
      fit-margin-left="1"
      fit-margin-right="0"
      fit-margin-bottom="1"
-     inkscape:zoom="1.7900244"
-     inkscape:cx="259.50831"
-     inkscape:cy="223.41388"
+     inkscape:zoom="1.8091979"
+     inkscape:cx="260.732"
+     inkscape:cy="235.358"
      inkscape:window-x="0"
      inkscape:window-y="25"
      inkscape:window-maximized="1"
@@ -366,20 +366,17 @@
   <text
      style="color:#000000;font-size:14px;font-family:Times;text-anchor:end;fill:#000000;stroke:none;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter"
      id="text3448"
-     x="368.76401"
+     x="417.73773"
      y="317.164">
     <tspan
        id="tspan3446"
-       style="font-family:Times">Tetra (<tspan
+       style="font-family:Times">Tetra <tspan
    style="fill:#808080"
-   id="tspan3823">mean</tspan>
+   id="tspan924">(mean</tspan>
  32.6 <tspan
    style="fill:#808080"
-   id="tspan3862">±</tspan>
- <tspan
-   style="fill:#808080"
-   id="tspan3833">1.1 min</tspan>
-)</tspan>
+   id="tspan3862">± 1.1 min [95% CI])</tspan>
+</tspan>
   </text>
   <path
      style="color:#000000;fill:none;stroke:#d62728;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter"
@@ -389,21 +386,14 @@
   <text
      style="color:#000000;font-size:14px;font-family:Times;text-anchor:end;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text3465"
-     x="368.76401"
-     y="338.164">
-    <tspan
-       id="tspan3463"
-       style="font-family:Times">MPC-HM (<tspan
+     x="336.42221"
+     y="338.164">MPC-HM <tspan
    style="fill:#808080"
-   id="tspan3825">mean</tspan>
+   id="tspan900">(mean</tspan>
  27.9 <tspan
    style="fill:#808080"
-   id="tspan3864">±</tspan>
- <tspan
-   style="fill:#808080"
-   id="tspan3835">0.9 min</tspan>
-)</tspan>
-  </text>
+   id="tspan3864">± 0.9)</tspan>
+</text>
   <path
      style="color:#000000;fill:none;stroke:#1f77b4;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
@@ -412,21 +402,14 @@
   <text
      style="color:#000000;font-size:14px;font-family:Times;text-anchor:end;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text3480"
-     x="368.76401"
-     y="359.164">
-    <tspan
-       id="tspan3478"
-       style="font-family:Times">RobustMPC-HM (<tspan
+     x="336.42221"
+     y="359.164">RobustMPC-HM <tspan
    style="fill:#808080"
-   id="tspan3827">mean</tspan>
+   id="tspan902">(mean</tspan>
  27.4 <tspan
    style="fill:#808080"
-   id="tspan3866">±</tspan>
- <tspan
-   style="fill:#808080"
-   id="tspan3837">0.9 min</tspan>
-)</tspan>
-  </text>
+   id="tspan3866">± 0.9)</tspan>
+</text>
   <path
      style="color:#000000;fill:none;stroke:#8c564b;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
@@ -435,21 +418,14 @@
   <text
      style="color:#000000;font-size:14px;font-family:Times;text-anchor:end;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text3495"
-     x="368.76401"
-     y="380.164">
-    <tspan
-       id="tspan3493"
-       style="font-family:Times">Pensieve (<tspan
+     x="336.42221"
+     y="380.164">Pensieve <tspan
    style="fill:#808080"
-   id="tspan3829">mean</tspan>
+   id="tspan904">(mean</tspan>
  28.5 <tspan
    style="fill:#808080"
-   id="tspan3868">±</tspan>
- <tspan
-   style="fill:#808080"
-   id="tspan3839">0.9 min</tspan>
-)</tspan>
-  </text>
+   id="tspan3868">± 0.9)</tspan>
+</text>
   <path
      style="color:#000000;fill:none;stroke:#9467bd;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
@@ -458,21 +434,14 @@
   <text
      style="color:#000000;font-size:14px;font-family:Times;text-anchor:end;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text3510"
-     x="368.76401"
-     y="401.164">
-    <tspan
-       id="tspan3508"
-       style="font-family:Times">BBA (<tspan
+     x="336.42221"
+     y="401.164">BBA <tspan
    style="fill:#808080"
-   id="tspan3831">mean</tspan>
+   id="tspan906">(mean</tspan>
  29.6 <tspan
    style="fill:#808080"
-   id="tspan3870">±</tspan>
- <tspan
-   style="fill:#808080"
-   id="tspan3841">1.0 min</tspan>
-)</tspan>
-  </text>
+   id="tspan3870">± 1.0)</tspan>
+</text>
   <path
      style="color:#000000;fill:none;stroke:#2ca02c;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
