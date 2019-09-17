@@ -99,6 +99,7 @@ struct SchemeStats {
     double total_stall_time = 0;    
 
     vector<double> ssim_samples{};
+    vector<double> ssim_variation_samples{};
 
     static unsigned int watch_time_bin(const double raw_watch_time) {
 	const int watch_time_bin = lrintf(floorf(log2(raw_watch_time)));
@@ -123,6 +124,14 @@ struct SchemeStats {
 	ssim_samples.push_back(mean_ssim);
     }
 
+    void add_ssim_variation_sample(const double ssim_variation) {
+	if (ssim_variation <= 0 or ssim_variation >= 1000) {
+	    throw runtime_error("invalid ssim variation: " + to_string(ssim_variation));
+	}
+	ssim_variation_samples.push_back(ssim_variation);
+    }
+
+
     double observed_stall_ratio() const {
 	return total_stall_time / total_watch_time;
     }
@@ -145,6 +154,29 @@ struct SchemeStats {
 	const double mean = mean_ssim();
 	const double sem = stddev_ssim() / sqrt(ssim_samples.size());
 	return { raw_ssim_to_db( mean - 2 * sem ), raw_ssim_to_db( mean ), raw_ssim_to_db( mean + 2 * sem ) };
+    }
+
+    double mean_ssim_variation() const {
+	return accumulate(ssim_variation_samples.begin(), ssim_variation_samples.end(), 0.0) / ssim_variation_samples.size();
+    }
+
+    double stddev_ssim_variation() const {
+	const double mean = mean_ssim_variation();
+	double ssr = 0;
+
+	cerr << "count: " << ssim_variation_samples.size() << ", mean=" << mean << "\n";
+
+	for ( const auto x : ssim_variation_samples ) {
+	    ssr += (x - mean) * (x - mean);
+	}
+	const double variance = (1.0 / (ssim_variation_samples.size() - 1)) * ssr;
+	return sqrt(variance);
+    }
+
+    tuple<double, double, double> sem_ssim_variation() const {
+	const double mean = mean_ssim_variation();
+	const double sem = stddev_ssim_variation() / sqrt(ssim_variation_samples.size());
+	return { mean - 2 * sem, mean, mean + 2 * sem };
     }
 };
 
@@ -246,22 +278,32 @@ public:
 
 	    const double mean_ssim_val = to_double(scratch[1]);
 
+	    // record ssim if available
+	    split_on_char(ssim_variation_db, '=', scratch);
+	    if (scratch[0] != "ssim_variation_db"sv) {
+		throw runtime_error("ssimvar field mismatch");
+	    }
+
+	    const double ssim_variation_db_val = to_double(scratch[1]);
+
 	    // record stall ratios (as a function of scheme and rounded watch time)
+	    SchemeStats *the_scheme = nullptr;
 	    if (scheme == "puffer_ttp_cl/bbr"sv) {
-		puffer.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val >= 0 ) { puffer.add_ssim_sample(mean_ssim_val); }
+		the_scheme = &puffer;
 	    } else if (scheme == "mpc/bbr"sv) {
-		mpc.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val >= 0 ) { mpc.add_ssim_sample(mean_ssim_val); }
+		the_scheme = &mpc;
 	    } else if (scheme == "robust_mpc/bbr"sv) {
-		robust_mpc.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val >= 0 ) { robust_mpc.add_ssim_sample(mean_ssim_val); }
+		the_scheme = &robust_mpc;
 	    } else if (scheme == "pensieve/bbr"sv) {
-		pensieve.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val >= 0 ) { pensieve.add_ssim_sample(mean_ssim_val); }
+		the_scheme = &pensieve;
 	    } else if (scheme == "linear_bba/bbr"sv) {
-		bba.add_sample(watch_time, stall_time);
-		if ( mean_ssim_val >= 0 ) { bba.add_ssim_sample(mean_ssim_val); }
+		the_scheme = &bba;
+	    }
+
+	    if (the_scheme) {
+		the_scheme->add_sample(watch_time, stall_time);
+		if ( mean_ssim_val >= 0 ) { the_scheme->add_ssim_sample(mean_ssim_val); }
+		if ( ssim_variation_db_val > 0 and ssim_variation_db_val <= 10000 ) { the_scheme->add_ssim_variation_sample(ssim_variation_db_val); }
 	    }
 	}
     }
@@ -333,9 +375,13 @@ public:
 	void print_summary() {
 	    const auto [ lower_limit, mean, upper_limit ] = stats();
 	    const auto [ lower_ssim_limit, mean_ssim, upper_ssim_limit ] = _scheme_sample.sem_ssim();
+	    const auto [ lower_ssim_variation, mean_ssim_variation, upper_ssim_variation ] = _scheme_sample.sem_ssim_variation();
 
 	    cout << fixed << setprecision(8);
-	    cout << _name << " stall ratio (95% CI): " << 100 * lower_limit << "% .. " << 100 * upper_limit << "%, mean= " << 100 * mean << "; SSIM (95% CI): " << lower_ssim_limit << " .. " << upper_ssim_limit << ", mean= " << mean_ssim << "\n";
+	    cout << _name << " stall ratio (95% CI): " << 100 * lower_limit << "% .. " << 100 * upper_limit << "%, mean= " << 100 * mean;
+	    cout << "; SSIM (95% CI): " << lower_ssim_limit << " .. " << upper_ssim_limit << ", mean= " << mean_ssim;
+	    cout << "; SSIMvar (95% CI): " << lower_ssim_variation << " .. " << upper_ssim_variation << ", mean= " << mean_ssim_variation;
+	    cout << "\n";
 	}
     };
 

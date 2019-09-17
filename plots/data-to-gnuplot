@@ -35,6 +35,9 @@ while (<>) {
   s{;}{}g;
   s{,}{}g;
   my ($name, $stall_low, $stall_high, $stall_mean, $ssim_low, $ssim_high, $ssim_mean) = (split)[0,5,7,9,13,15,17];
+  if ($name eq q{Puffer}) {
+      $name = q{Tetra};
+  }
 
   push @data, qq{$stall_mean $ssim_mean $stall_low $stall_high $ssim_low $ssim_high $colors{$name} "$name"};
 }
