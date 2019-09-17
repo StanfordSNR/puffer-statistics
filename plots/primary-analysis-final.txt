@@ -1,10 +1,10 @@
-#Tetra considered 93209 sessions, stall/watch hours: 18.965/16668.959
+#Puffer considered 93209 sessions, stall/watch hours: 18.965/16668.959
 #MPC-HM considered 93819 sessions, stall/watch hours: 35.997/14603.397
 #RobustMPC-HM considered 91534 sessions, stall/watch hours: 14.686/13997.049
 #Pensieve considered 90952 sessions, stall/watch hours: 24.269/14230.960
 #BBA considered 89287 sessions, stall/watch hours: 27.874/15110.438
-Tetra stall ratio (95% CI): 0.11099028% .. 0.13473307%, mean= 0.12257820; SSIM (95% CI): 16.23219516 .. 16.27144073, mean= 16.25177361
-MPC-HM stall ratio (95% CI): 0.21593152% .. 0.28819990%, mean= 0.24621307; SSIM (95% CI): 16.01438613 .. 16.05298187, mean= 16.03364113
-RobustMPC-HM stall ratio (95% CI): 0.08786913% .. 0.11226937%, mean= 0.09977781; SSIM (95% CI): 14.29058743 .. 14.33186887, mean= 14.31117910
-Pensieve stall ratio (95% CI): 0.15185357% .. 0.18314708%, mean= 0.16706356; SSIM (95% CI): 15.87296952 .. 15.91741020, mean= 15.89513302
-BBA stall ratio (95% CI): 0.16879002% .. 0.20314905%, mean= 0.18525316; SSIM (95% CI): 14.92249957 .. 14.95746001, mean= 14.93994462
+Puffer stall ratio (95% CI): 0.11140496% .. 0.13499990%, mean= 0.12270265; SSIM (95% CI): 16.23219516 .. 16.27144073, mean= 16.25177361; SSIMvar (95% CI): 0.67664606 .. 0.68276401, mean= 0.67970503
+MPC-HM stall ratio (95% CI): 0.21540644% .. 0.28746447%, mean= 0.24573421; SSIM (95% CI): 16.01438613 .. 16.05298187, mean= 16.03364113; SSIMvar (95% CI): 0.72081090 .. 0.72671007, mean= 0.72376048
+RobustMPC-HM stall ratio (95% CI): 0.08799182% .. 0.11236415%, mean= 0.09974793; SSIM (95% CI): 14.29058743 .. 14.33186887, mean= 14.31117910; SSIMvar (95% CI): 0.89494812 .. 0.90235510, mean= 0.89865161
+Pensieve stall ratio (95% CI): 0.15131081% .. 0.18329629%, mean= 0.16700717; SSIM (95% CI): 15.87296952 .. 15.91741020, mean= 15.89513302; SSIMvar (95% CI): 0.96760641 .. 0.97703488, mean= 0.97232065
+BBA stall ratio (95% CI): 0.16861644% .. 0.20327876%, mean= 0.18538438; SSIM (95% CI): 14.92249957 .. 14.95746001, mean= 14.93994462; SSIMvar (95% CI): 1.02638746 .. 1.03394337, mean= 1.03016542
