@@ -5,13 +5,15 @@ use strict;
 print <<'END';
 set xlabel "Time spent stalled (%)" 
 set xlabel  offset character 0, 0.75, 0 font "" textcolor lt -1 norotate
-set xrange [ 0.295000 : 0.0850000 ] reverse writeback
+set xrange [ 1.3:0.45 ] reverse writeback
 set ylabel "Average SSIM (dB)" 
 set ylabel  offset character 3, 0, 0 font "" textcolor lt -1 rotate
-set yrange [ 14.2000 : 16.3000 ] noreverse writeback
+set yrange [ 12.9:14.6 ] noreverse writeback
 set border 3 front lt black linewidth 1.000 dashtype solid
 set xtics border out scale 0.5,0.5 offset 0,0.5 nomirror norotate  autojustify
 set ytics border out scale 0.5,0.5 offset 0.25,0 nomirror norotate  autojustify
+set xtics 0.25
+set ytics 0.5
 set font "Times,10"
 unset key
 set noclip

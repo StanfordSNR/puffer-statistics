@@ -238,7 +238,6 @@ public:
 		continue;
 	    }
 
-	    /*
 	    split_on_char(mean_delivery_rate, '=', scratch);
 	    if (scratch[0] != "mean_delivery_rate"sv) {
 		throw runtime_error("field mismatch");
@@ -247,7 +246,6 @@ public:
 	    if (delivery_rate > (6000000.0/8.0)) {
 		continue;
 	    }
-	    */
 
 	    split_on_char(time_after_startup, '=', scratch);
 	    if (scratch[0] != "total_after_startup"sv) {
@@ -325,7 +323,15 @@ public:
 
 	    return {simulated_watch_time, simulated_stall_time};
 	} else {
-	    return {simulated_watch_time, 0};
+	    if (simulated_watch_time_binned == 0) {
+		throw runtime_error("no small session stall_ratios?");
+	    }
+	    simulated_watch_time_binned--;
+	    size_t num_stall_ratio_samples = scheme.binned_stall_ratios.at(simulated_watch_time_binned).size();
+	    uniform_int_distribution<> possible_stall_ratio_index(0, num_stall_ratio_samples - 1);
+	    const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(possible_stall_ratio_index(prng));
+
+	    return {simulated_watch_time, simulated_stall_time};
 	}
     }
 
