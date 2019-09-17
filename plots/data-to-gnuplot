@@ -4,14 +4,14 @@ use strict;
 
 print <<'END';
 set xlabel "Time spent stalled (%)" 
-set xlabel  offset character 0, 0.5, 0 font "" textcolor lt -1 norotate
+set xlabel  offset character 0, 0.75, 0 font "" textcolor lt -1 norotate
 set xrange [ 0.295000 : 0.0850000 ] reverse writeback
 set ylabel "Average SSIM (dB)" 
 set ylabel  offset character 3, 0, 0 font "" textcolor lt -1 rotate
 set yrange [ 14.2000 : 16.3000 ] noreverse writeback
 set border 3 front lt black linewidth 1.000 dashtype solid
-set xtics border out scale 0.5,0.5 nomirror norotate  autojustify
-set ytics border out scale 0.5,0.5 nomirror norotate  autojustify
+set xtics border out scale 0.5,0.5 offset 0,0.5 nomirror norotate  autojustify
+set ytics border out scale 0.5,0.5 offset 0.25,0 nomirror norotate  autojustify
 set font "Times,10"
 unset key
 set noclip
@@ -19,9 +19,13 @@ END
 
 my $n = 0;
 
-my @colors = qw[0 000075 800000 911eb4 469990 9a6324 a9a9a9];
+my %colors = (Tetra => 0xd62728,
+	      q{MPC-HM} => 0x1f77b4,
+	      q{RobustMPC-HM} => 0x8c564b,
+	      BBA => 0x2ca02c,
+	      Pensieve => 0x9467bd);
 
-my @labels;
+my @data;
 
 while (<>) {
   chomp;
@@ -32,22 +36,15 @@ while (<>) {
   s{,}{}g;
   my ($name, $stall_low, $stall_high, $stall_mean, $ssim_low, $ssim_high, $ssim_mean) = (split)[0,5,7,9,13,15,17];
 
-  print qq{set object $n polygon from };
-  print qq{$stall_low,$ssim_mean to };
-  print qq{$stall_mean,$ssim_high to };
-  print qq{$stall_high,$ssim_mean to };
-  print qq{$stall_mean,$ssim_low to };
-  print qq{$stall_low,$ssim_mean\n};
-
-  my $color = q{#} . $colors[$n];
-
-  print qq{set object $n noclip fc rgb '${color}' fillstyle solid lw 0 dt (0.000001,10000000)\n};
-
-  my $offset_pos = $ssim_high + 0.028;
-  push @labels, qq{$stall_mean $offset_pos "$name"};
+  push @data, qq{$stall_mean $ssim_mean $stall_low $stall_high $ssim_low $ssim_high $colors{$name} "$name"};
 }
 
 print qq{set terminal "svg" font "Times,20"\n};
-print qq{plot '-' with labels\n};
-print join qq{\n}, @labels;
+print qq{set errorbars 0.5\n};
+print qq{plot '-' using 1:2:3:4:5:6:7 with xyerrorbars lc rgb var lw 1.75 pt 7 ps 0.33, '-' using 1:2:8 with labels offset 0,-.5\n};
+
+print join qq{\n}, @data;
 print qq{\ne\n};
+print join qq{\n}, @data;
+print qq{\ne\n};
+

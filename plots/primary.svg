@@ -8,15 +8,15 @@
    xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   width="540.76453"
-   height="446.38"
-   viewBox="0 0 540.76453 446.38"
+   width="502.06"
+   height="439.73999"
+   viewBox="0 0 502.06 439.73999"
    version="1.1"
-   id="svg474"
+   id="svg11847"
    sodipodi:docname="primary.svg"
    inkscape:version="0.92.4 (5da689c313, 2019-01-14)">
   <metadata
-     id="metadata480">
+     id="metadata11853">
     <rdf:RDF>
       <cc:Work
          rdf:about="">
@@ -28,118 +28,118 @@
     </rdf:RDF>
   </metadata>
   <defs
-     id="defs478">
+     id="defs11851">
     <defs
-       id="defs274">
+       id="defs11652">
       <circle
-         style="stroke:currentColor;stroke-width:0.5"
-         cy="0"
-         cx="0"
          r="0.5"
-         id="gpDot" />
+         id="gpDot"
+         cx="0"
+         cy="0"
+         style="stroke:currentColor;stroke-width:0.5" />
       <path
-         style="stroke:currentColor;stroke-width:0.133"
-         inkscape:connector-curvature="0"
          d="M -1,0 H 1 M 0,-1 v 2"
-         id="gpPt0" />
-      <path
-         style="stroke:currentColor;stroke-width:0.133"
+         id="gpPt0"
          inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
+      <path
          d="M -1,-1 1,1 M 1,-1 -1,1"
-         id="gpPt1" />
-      <path
-         style="stroke:currentColor;stroke-width:0.133"
+         id="gpPt1"
          inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
+      <path
          d="M -1,0 H 1 M 0,-1 v 2 m -1,-2 2,2 m -2,0 2,-2"
-         id="gpPt2" />
+         id="gpPt2"
+         inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
       <rect
-         style="stroke:currentColor;stroke-width:0.133"
          height="2"
          width="2"
          y="-1"
          x="-1"
-         id="gpPt3" />
+         id="gpPt3"
+         style="stroke:currentColor;stroke-width:0.133" />
       <rect
-         style="fill:currentColor;stroke:currentColor;stroke-width:0.133"
          height="2"
          width="2"
          y="-1"
          x="-1"
-         id="gpPt4" />
+         id="gpPt4"
+         style="fill:currentColor;stroke:currentColor;stroke-width:0.133" />
       <circle
-         style="stroke:currentColor;stroke-width:0.133"
          r="1"
          cy="0"
          cx="0"
-         id="gpPt5" />
+         id="gpPt5"
+         style="stroke:currentColor;stroke-width:0.133" />
       <use
-         height="100%"
-         width="100%"
-         y="0"
-         x="0"
-         style="fill:currentColor;stroke:none"
          id="gpPt6"
-         xlink:href="#gpPt5" />
-      <path
-         style="stroke:currentColor;stroke-width:0.133"
-         inkscape:connector-curvature="0"
-         d="m 0,-1.33 -1.33,2 h 2.66 z"
-         id="gpPt7" />
-      <use
-         height="100%"
-         width="100%"
-         y="0"
-         x="0"
+         xlink:href="#gpPt5"
          style="fill:currentColor;stroke:none"
-         id="gpPt8"
-         xlink:href="#gpPt7" />
-      <use
-         height="100%"
-         width="100%"
-         y="0"
          x="0"
-         style="stroke:currentColor"
+         y="0"
+         width="100%"
+         height="100%" />
+      <path
+         d="m 0,-1.33 -1.33,2 h 2.66 z"
+         id="gpPt7"
+         inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
+      <use
+         id="gpPt8"
+         xlink:href="#gpPt7"
+         style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
+      <use
          transform="scale(-1)"
          id="gpPt9"
-         xlink:href="#gpPt7" />
-      <use
-         height="100%"
-         width="100%"
-         y="0"
-         x="0"
-         style="fill:currentColor;stroke:none"
-         id="gpPt10"
-         xlink:href="#gpPt9" />
-      <use
-         height="100%"
-         width="100%"
-         y="0"
-         x="0"
+         xlink:href="#gpPt7"
          style="stroke:currentColor"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
+      <use
+         id="gpPt10"
+         xlink:href="#gpPt9"
+         style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
+      <use
          transform="rotate(45)"
          id="gpPt11"
-         xlink:href="#gpPt3" />
-      <use
-         height="100%"
-         width="100%"
-         y="0"
+         xlink:href="#gpPt3"
+         style="stroke:currentColor"
          x="0"
-         style="fill:currentColor;stroke:none"
+         y="0"
+         width="100%"
+         height="100%" />
+      <use
          id="gpPt12"
-         xlink:href="#gpPt11" />
-      <path
-         style="stroke:currentColor;stroke-width:0.133"
-         inkscape:connector-curvature="0"
-         d="M 0,1.33 1.265,0.411 0.782,-1.067 -0.782,-1.076 -1.265,0.411 Z"
-         id="gpPt13" />
-      <use
-         height="100%"
-         width="100%"
-         y="0"
-         x="0"
+         xlink:href="#gpPt11"
          style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
+      <path
+         d="M 0,1.33 1.265,0.411 0.782,-1.067 -0.782,-1.076 -1.265,0.411 Z"
+         id="gpPt13"
+         inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
+      <use
          id="gpPt14"
-         xlink:href="#gpPt13" />
+         xlink:href="#gpPt13"
+         style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
       <filter
          width="1"
          height="1"
@@ -148,12 +148,12 @@
          filterUnits="objectBoundingBox"
          id="textbox">
         <feFlood
-           id="feFlood264"
+           id="feFlood11642"
            result="bgnd"
            flood-opacity="1"
            flood-color="white" />
         <feComposite
-           id="feComposite266"
+           id="feComposite11644"
            operator="atop"
            in2="bgnd"
            in="SourceGraphic" />
@@ -166,12 +166,12 @@
          filterUnits="objectBoundingBox"
          id="greybox">
         <feFlood
-           id="feFlood269"
+           id="feFlood11647"
            result="grey"
            flood-opacity="1"
            flood-color="lightgrey" />
         <feComposite
-           id="feComposite271"
+           id="feComposite11649"
            operator="atop"
            in2="grey"
            in="SourceGraphic" />
@@ -187,434 +187,449 @@
      guidetolerance="10"
      inkscape:pageopacity="0"
      inkscape:pageshadow="2"
-     inkscape:window-width="1916"
-     inkscape:window-height="1164"
-     id="namedview476"
+     inkscape:window-width="1920"
+     inkscape:window-height="1031"
+     id="namedview11849"
      showgrid="false"
      fit-margin-top="0"
      fit-margin-left="0"
      fit-margin-right="0"
      fit-margin-bottom="0"
-     inkscape:zoom="1.7837319"
-     inkscape:cx="248.61801"
-     inkscape:cy="243.94492"
-     inkscape:window-x="1200"
-     inkscape:window-y="34"
-     inkscape:window-maximized="0"
-     inkscape:current-layer="svg474" />
+     inkscape:zoom="1.8678302"
+     inkscape:cx="311.62195"
+     inkscape:cy="227.30147"
+     inkscape:window-x="0"
+     inkscape:window-y="25"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg11847" />
   <title
-     id="title242">Gnuplot</title>
+     id="title11620">Gnuplot</title>
   <desc
-     id="desc244">Produced by GNUPLOT 5.2 patchlevel 6 </desc>
+     id="desc11622">Produced by GNUPLOT 5.2 patchlevel 6 </desc>
   <g
      style="color:#ffffff;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g276"
-     transform="translate(-55.84,-23.46)" />
+     id="g11654"
+     transform="translate(-55.84,-30.1)" />
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g286"
-     transform="translate(-55.84,-23.46)">
+     id="g11664"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path278"
-       d="M 142.5,339.9 H 135" />
+       id="path11656"
+       d="M 142.5,346.3 H 135" />
     <g
        style="font-size:20px;font-family:Times;text-anchor:end;fill:#000000;stroke:none"
-       id="g284"
+       id="g11662"
        font-size="20.00"
-       transform="translate(121,346.4)">
+       transform="translate(124.5,352.8)">
       <text
-         id="text282">
+         id="text11660">
         <tspan
            style="font-family:Times"
-           id="tspan280">14.5</tspan>
+           id="tspan11658">14.5</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g296"
-     transform="translate(-55.84,-23.46)">
+     id="g11674"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path288"
-       d="M 142.5,253.8 H 135" />
+       id="path11666"
+       d="M 142.5,258.5 H 135" />
     <g
        style="font-size:20px;font-family:Times;text-anchor:end;fill:#000000;stroke:none"
-       id="g294"
+       id="g11672"
        font-size="20.00"
-       transform="translate(121,260.3)">
+       transform="translate(124.5,265)">
       <text
-         id="text292">
+         id="text11670">
         <tspan
            style="font-family:Times"
-           id="tspan290">15</tspan>
+           id="tspan11668">15</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g306"
-     transform="translate(-55.84,-23.46)">
+     id="g11684"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path298"
-       d="M 142.5,167.8 H 135" />
+       id="path11676"
+       d="M 142.5,170.6 H 135" />
     <g
        style="font-size:20px;font-family:Times;text-anchor:end;fill:#000000;stroke:none"
-       id="g304"
+       id="g11682"
        font-size="20.00"
-       transform="translate(121,174.3)">
+       transform="translate(124.5,177.1)">
       <text
-         id="text302">
+         id="text11680">
         <tspan
            style="font-family:Times"
-           id="tspan300">15.5</tspan>
+           id="tspan11678">15.5</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g316"
-     transform="translate(-55.84,-23.46)">
+     id="g11694"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path308"
-       d="M 142.5,81.7 H 135" />
+       id="path11686"
+       d="M 142.5,82.8 H 135" />
     <g
        style="font-size:20px;font-family:Times;text-anchor:end;fill:#000000;stroke:none"
-       id="g314"
+       id="g11692"
        font-size="20.00"
-       transform="translate(121,88.2)">
+       transform="translate(124.5,89.3)">
       <text
-         id="text312">
+         id="text11690">
         <tspan
            style="font-family:Times"
-           id="tspan310">16</tspan>
+           id="tspan11688">16</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g326"
-     transform="translate(-55.84,-23.46)">
+     id="g11704"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path318"
-       d="M 528.2,391.5 V 399" />
+       id="path11696"
+       d="m 528.2,399 v 7.5" />
     <g
        style="font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none"
-       id="g324"
+       id="g11702"
        font-size="20.00"
-       transform="translate(528.2,435.5)">
+       transform="translate(528.2,428)">
       <text
-         id="text322">
+         id="text11700">
         <tspan
            style="font-family:Times"
-           id="tspan320">0.1</tspan>
+           id="tspan11698">0.1</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g336"
-     transform="translate(-55.84,-23.46)">
+     id="g11714"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path328"
-       d="M 429.3,391.5 V 399" />
+       id="path11706"
+       d="m 429.3,399 v 7.5" />
     <g
        style="font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none"
-       id="g334"
+       id="g11712"
        font-size="20.00"
-       transform="translate(429.3,435.5)">
+       transform="translate(429.3,428)">
       <text
-         id="text332">
+         id="text11710">
         <tspan
            style="font-family:Times"
-           id="tspan330">0.15</tspan>
+           id="tspan11708">0.15</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g346"
-     transform="translate(-55.84,-23.46)">
+     id="g11724"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path338"
-       d="M 330.4,391.5 V 399" />
+       id="path11716"
+       d="m 330.4,399 v 7.5" />
     <g
        style="font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none"
-       id="g344"
+       id="g11722"
        font-size="20.00"
-       transform="translate(330.4,435.5)">
+       transform="translate(330.4,428)">
       <text
-         id="text342">
+         id="text11720">
         <tspan
            style="font-family:Times"
-           id="tspan340">0.2</tspan>
+           id="tspan11718">0.2</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g356"
-     transform="translate(-55.84,-23.46)">
+     id="g11734"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path348"
-       d="M 231.5,391.5 V 399" />
+       id="path11726"
+       d="m 231.5,399 v 7.5" />
     <g
        style="font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none"
-       id="g354"
+       id="g11732"
        font-size="20.00"
-       transform="translate(231.5,435.5)">
+       transform="translate(231.5,428)">
       <text
-         id="text352">
+         id="text11730">
         <tspan
            style="font-family:Times"
-           id="tspan350">0.25</tspan>
+           id="tspan11728">0.25</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g358"
-     transform="translate(-55.84,-23.46)" />
+     id="g11736"
+     transform="translate(-55.84,-30.1)" />
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g362"
-     transform="translate(-55.84,-23.46)">
+     id="g11740"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path360"
-       d="m 142.5,30.1 v 361.4 h 415.4 m 0,-361.4 m -415.4,0" />
+       id="path11738"
+       d="M 142.5,30.1 V 399 h 415.4 m 0,-368.9 m -415.4,0" />
   </g>
   <g
-     style="color:#000000;fill:none;stroke:#000000;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g364"
-     transform="translate(-55.84,-23.46)" />
-  <g
-     style="color:#000000;fill:none;stroke:currentColor;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g372"
-     transform="translate(-55.84,-23.46)"><g
-   style="stroke:none;shape-rendering:crispEdges"
-   id="g368">
-  <polygon
-     style="fill:#000075"
-     id="polygon366"
-     points="459.5,38.4 483.6,41.8 506.5,38.4 483.6,35 " />
-</g>
-<path
-   style="stroke:#000000;stroke-dasharray:none"
-   inkscape:connector-curvature="0"
-   id="path370"
-   d="m 506.5,38.4 -22.9,-3.4 -24.1,3.4 24.1,3.4 z" />
-Z </g>
-  <g
-     style="color:#000000;fill:none;stroke:currentColor;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g380"
-     transform="translate(-55.84,-23.46)"><g
-   style="stroke:none;shape-rendering:crispEdges"
-   id="g376">
-  <polygon
-     style="fill:#800000"
-     id="polygon374"
-     points="156,75.9 239,79.3 298.9,75.9 239,72.6 " />
-</g>
-<path
-   style="stroke:#000000;stroke-dasharray:none"
-   inkscape:connector-curvature="0"
-   id="path378"
-   d="m 298.9,75.9 -59.9,-3.3 -83,3.3 83,3.4 z" />
-Z </g>
-  <g
-     style="color:#000000;fill:none;stroke:currentColor;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g388"
-     transform="translate(-55.84,-23.46)"><g
-   style="stroke:none;shape-rendering:crispEdges"
-   id="g384">
-  <polygon
-     style="fill:#911eb4"
-     id="polygon382"
-     points="504,372.4 528.7,375.9 552.2,372.4 528.7,368.8 " />
-</g>
-<path
-   style="stroke:#000000;stroke-dasharray:none"
-   inkscape:connector-curvature="0"
-   id="path386"
-   d="m 552.2,372.4 -23.5,-3.6 -24.7,3.6 24.7,3.5 z" />
-Z </g>
-  <g
-     style="color:#000000;fill:none;stroke:currentColor;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g396"
-     transform="translate(-55.84,-23.46)"><g
-   style="stroke:none;shape-rendering:crispEdges"
-   id="g392">
-  <polygon
-     style="fill:#469990"
-     id="polygon390"
-     points="363.8,99.8 395.6,103.6 425.7,99.8 395.6,95.9 " />
-</g>
-<path
-   style="stroke:#000000;stroke-dasharray:none"
-   inkscape:connector-curvature="0"
-   id="path394"
-   d="m 425.7,99.8 -30.1,-3.9 -31.8,3.9 31.8,3.8 z" />
-Z </g>
-  <g
-     style="color:#000000;fill:none;stroke:currentColor;stroke-width:0;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g404"
-     transform="translate(-55.84,-23.46)"><g
-   style="stroke:none;shape-rendering:crispEdges"
-   id="g400">
-  <polygon
-     style="fill:#9a6324"
-     id="polygon398"
-     points="324.2,264.2 359.6,267.2 392.2,264.2 359.6,261.1 " />
-</g>
-<path
-   style="stroke:#000000;stroke-dasharray:none"
-   inkscape:connector-curvature="0"
-   id="path402"
-   d="m 392.2,264.2 -32.6,-3.1 -35.4,3.1 35.4,3 z" />
-Z </g>
-  <g
-     style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g406"
-     transform="translate(-55.84,-23.46)" />
-  <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g414"
-     transform="translate(-55.84,-23.46)">
+     id="g11748"
+     transform="translate(-55.84,-30.1)">
     <g
        style="font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none"
-       id="g412"
+       id="g11746"
        font-size="20.00"
-       transform="rotate(-90,140.15,70.65)">
+       transform="rotate(-90,142.05,72.55)">
       <text
-         id="text410">
+         id="text11744">
         <tspan
            style="font-family:Times"
-           id="tspan408">Average SSIM (dB)</tspan>
+           id="tspan11742">Average SSIM (dB)</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g422"
-     transform="translate(-55.84,-23.46)">
+     id="g11756"
+     transform="translate(-55.84,-30.1)">
     <g
        style="font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none"
-       id="g420"
+       id="g11754"
        font-size="20.00"
        transform="translate(350.2,465.5)">
       <text
-         id="text418">
+         id="text11752">
         <tspan
            style="font-family:Times"
-           id="tspan416">Time spent stalled (%)</tspan>
+           id="tspan11750">Time spent stalled (%)</tspan>
       </text>
     </g>
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g424"
-     transform="translate(-55.84,-23.46)" />
+     id="g11758"
+     transform="translate(-55.84,-30.1)" />
+  <g
+     id="gnuplot_plot_1"
+     transform="translate(-55.84,-30.1)">
+    <title
+       id="title11760">'-' using 1:2:3:4:5:6:7</title>
+    <g
+       style="color:#ffffff;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
+       id="g11762" />
+    <g
+       style="color:#000000;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
+       id="g11794">
+      <path
+         style="stroke:#d62728"
+         inkscape:connector-curvature="0"
+         id="path11764"
+         d="m 483.6,42 v -6.9 m -3.8,6.9 h 7.5 m -7.5,-6.9 h 7.5" />
+      <path
+         style="stroke:#1f77b4"
+         inkscape:connector-curvature="0"
+         id="path11766"
+         d="m 239,80.3 v -6.8 m -3.8,6.8 h 7.5 m -7.5,-6.8 h 7.5" />
+      <path
+         style="stroke:#8c564b"
+         inkscape:connector-curvature="0"
+         id="path11768"
+         d="m 528.7,383.1 v -7.3 m -3.8,7.3 h 7.5 m -7.5,-7.3 h 7.5" />
+      <path
+         style="stroke:#9467bd"
+         inkscape:connector-curvature="0"
+         id="path11770"
+         d="m 395.6,105.1 v -7.8 m -3.8,7.8 h 7.5 m -7.5,-7.8 h 7.5" />
+      <path
+         style="stroke:#2ca02c"
+         inkscape:connector-curvature="0"
+         id="path11772"
+         d="m 359.6,272.1 v -6.2 m -3.8,6.2 h 7.5 m -7.5,-6.2 h 7.5" />
+      <path
+         style="stroke:#d62728"
+         inkscape:connector-curvature="0"
+         id="path11774"
+         d="m 506.5,38.6 h -47 m 47,3.8 v -7.5 m -47,7.5 v -7.5" />
+      <path
+         style="stroke:#1f77b4"
+         inkscape:connector-curvature="0"
+         id="path11776"
+         d="M 298.9,76.9 H 156 m 142.9,3.8 V 73.2 M 156,80.7 v -7.5" />
+      <path
+         style="stroke:#8c564b"
+         inkscape:connector-curvature="0"
+         id="path11778"
+         d="M 552.2,379.5 H 504 m 48.2,3.8 v -7.5 m -48.2,7.5 v -7.5" />
+      <path
+         style="stroke:#9467bd"
+         inkscape:connector-curvature="0"
+         id="path11780"
+         d="m 425.7,101.2 h -61.9 m 61.9,3.8 v -7.5 m -61.9,7.5 v -7.5" />
+      <path
+         style="stroke:#2ca02c"
+         inkscape:connector-curvature="0"
+         id="path11782"
+         d="m 392.2,269 h -68 m 68,3.8 v -7.5 m -68,7.5 v -7.5" />
+      <use
+         height="100%"
+         width="100%"
+         y="0"
+         x="0"
+         style="color:#d62728"
+         id="use11784"
+         transform="matrix(2.48,0,0,2.48,483.6,38.6)"
+         xlink:href="#gpPt6" />
+      <use
+         height="100%"
+         width="100%"
+         y="0"
+         x="0"
+         style="color:#1f77b4"
+         id="use11786"
+         transform="matrix(2.48,0,0,2.48,239,76.9)"
+         xlink:href="#gpPt6" />
+      <use
+         height="100%"
+         width="100%"
+         y="0"
+         x="0"
+         style="color:#8c564b"
+         id="use11788"
+         transform="matrix(2.48,0,0,2.48,528.7,379.5)"
+         xlink:href="#gpPt6" />
+      <use
+         height="100%"
+         width="100%"
+         y="0"
+         x="0"
+         style="color:#9467bd"
+         id="use11790"
+         transform="matrix(2.48,0,0,2.48,395.6,101.2)"
+         xlink:href="#gpPt6" />
+      <use
+         height="100%"
+         width="100%"
+         y="0"
+         x="0"
+         style="color:#2ca02c"
+         id="use11792"
+         transform="matrix(2.48,0,0,2.48,359.6,269)"
+         xlink:href="#gpPt6" />
+    </g>
+  </g>
   <g
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g432"
+     id="g11805"
      font-size="20.00"
-     transform="translate(411.50195,36.225518)">
+     transform="translate(427.76,30)">
     <text
-       id="text430">
+       id="text11803">
       <tspan
          style="font-family:Times"
-         id="tspan428">Tetra</tspan>
+         id="tspan11801">Tetra</tspan>
     </text>
   </g>
   <g
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g438"
+     id="g11811"
      font-size="20.00"
-     transform="translate(179.79627,73.825518)">
+     transform="translate(178.34158,68.3)">
     <text
-       id="text436">
+       id="text11809">
       <tspan
          style="font-family:Times"
-         id="tspan434">MPC-HM</tspan>
+         id="tspan11807">MPC-HM</tspan>
     </text>
   </g>
   <g
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g444"
+     id="g11817"
      font-size="20.00"
-     transform="translate(377.5542,354.88871)">
+     transform="translate(430.30793,335.55439)">
     <text
-       id="text442">
+       id="text11815">
       <tspan
          style="font-family:Times"
-         id="tspan440">RobustMPC-HM</tspan>
+         id="tspan11813">RobustMPC-HM</tspan>
     </text>
   </g>
   <g
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g450"
+     id="g11823"
      font-size="20.00"
-     transform="translate(336.39627,97.68614)">
+     transform="translate(339.76,92.6)">
     <text
-       id="text448">
+       id="text11821">
       <tspan
          style="font-family:Times"
-         id="tspan446">Pensieve</tspan>
+         id="tspan11819">Pensieve</tspan>
     </text>
   </g>
   <g
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g456"
+     id="g11829"
      font-size="20.00"
-     transform="translate(303.76,261.20427)">
+     transform="translate(303.76,260.4)">
     <text
-       id="text454">
+       id="text11827">
       <tspan
          style="font-family:Times"
-         id="tspan452">BBA</tspan>
+         id="tspan11825">BBA</tspan>
     </text>
   </g>
   <g
      style="color:#ffffff;fill:none;stroke:#000000;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g461"
-     transform="translate(-55.84,-23.46)" />
+     id="g11834"
+     transform="translate(-55.84,-30.1)" />
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g463"
-     transform="translate(-55.84,-23.46)" />
+     id="g11836"
+     transform="translate(-55.84,-30.1)" />
   <g
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g465"
-     transform="translate(-55.84,-23.46)" />
+     id="g11838"
+     transform="translate(-55.84,-30.1)" />
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g469"
-     transform="translate(-55.84,-23.46)">
+     id="g11842"
+     transform="translate(-55.84,-30.1)">
     <path
        style="stroke:#000000"
        inkscape:connector-curvature="0"
-       id="path467"
-       d="m 142.5,30.1 v 361.4 h 415.4 m 0,-361.4 m -415.4,0" />
+       id="path11840"
+       d="M 142.5,30.1 V 399 h 415.4 m 0,-368.9 m -415.4,0" />
   </g>
   <g
      style="color:#000000;fill:none;stroke:currentColor;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
-     id="g471"
-     transform="translate(-55.84,-23.46)" />
+     id="g11844"
+     transform="translate(-55.84,-30.1)" />
 </svg>

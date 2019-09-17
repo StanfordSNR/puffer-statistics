@@ -1,0 +1,10 @@
+#Tetra considered 93209 sessions, stall/watch hours: 18.965/16668.959
+#MPC-HM considered 93819 sessions, stall/watch hours: 35.997/14603.397
+#RobustMPC-HM considered 91534 sessions, stall/watch hours: 14.686/13997.049
+#Pensieve considered 90952 sessions, stall/watch hours: 24.269/14230.960
+#BBA considered 89287 sessions, stall/watch hours: 27.874/15110.438
+Tetra stall ratio (95% CI): 0.11099028% .. 0.13473307%, mean= 0.12257820; SSIM (95% CI): 16.23219516 .. 16.27144073, mean= 16.25177361
+MPC-HM stall ratio (95% CI): 0.21593152% .. 0.28819990%, mean= 0.24621307; SSIM (95% CI): 16.01438613 .. 16.05298187, mean= 16.03364113
+RobustMPC-HM stall ratio (95% CI): 0.08786913% .. 0.11226937%, mean= 0.09977781; SSIM (95% CI): 14.29058743 .. 14.33186887, mean= 14.31117910
+Pensieve stall ratio (95% CI): 0.15185357% .. 0.18314708%, mean= 0.16706356; SSIM (95% CI): 15.87296952 .. 15.91741020, mean= 15.89513302
+BBA stall ratio (95% CI): 0.16879002% .. 0.20314905%, mean= 0.18525316; SSIM (95% CI): 14.92249957 .. 14.95746001, mean= 14.93994462
