@@ -177,6 +177,22 @@
            in="SourceGraphic" />
       </filter>
     </defs>
+    <clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath13327">
+      <path
+         d="M 0,309 H 432 V 0 H 0 Z"
+         id="path13325"
+         inkscape:connector-curvature="0" />
+    </clipPath>
+    <clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath13335">
+      <path
+         d="m 295.982,223.447 h 96.385 v -96.384 h -96.385 z"
+         id="path13333"
+         inkscape:connector-curvature="0" />
+    </clipPath>
   </defs>
   <sodipodi:namedview
      pagecolor="#ffffff"
@@ -196,8 +212,8 @@
      fit-margin-right="0"
      fit-margin-bottom="1"
      inkscape:zoom="1.5563165"
-     inkscape:cx="241.97979"
-     inkscape:cy="233.59619"
+     inkscape:cx="145.59837"
+     inkscape:cy="231.02602"
      inkscape:window-x="0"
      inkscape:window-y="25"
      inkscape:window-maximized="1"
@@ -487,4 +503,58 @@
      id="path2107"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
+  <g
+     transform="translate(1.7348338,-1.5895511)"
+     id="g14023">
+    <g
+       id="g13321"
+       transform="matrix(1.3333333,0,0,-1.3333333,-297.35554,526.86056)">
+      <g
+         clip-path="url(#clipPath13327)"
+         id="g13323">
+        <g
+           id="g13329">
+          <g
+             id="g13331" />
+          <g
+             clip-path="url(#clipPath13335)"
+             id="g13357"
+             style="opacity:0.44999701">
+            <path
+               inkscape:connector-curvature="0"
+               id="path13337"
+               style="fill:#dddddc;fill-opacity:1;fill-rule:nonzero;stroke:none"
+               d="m 388.8662,198.936 -68.373,-68.374 c -4.667,-4.667 -12.304,-4.667 -16.971,0 l -4.04,4.041 c -4.667,4.667 -4.667,12.304 0,16.97 l 68.373,68.374 c 4.667,4.667 12.304,4.667 16.971,0 l 4.04,-4.04 c 4.667,-4.667 4.667,-12.304 0,-16.971" />
+            <path
+               inkscape:connector-curvature="0"
+               id="path13341"
+               style="fill:#353535;fill-opacity:1;fill-rule:nonzero;stroke:none"
+               d="m 311.1367,130 78.293,78.292" />
+            <path
+               inkscape:connector-curvature="0"
+               id="path13345"
+               style="fill:none;stroke:#353535;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:1"
+               d="m 311.1367,130 73.681,73.681" />
+            <path
+               inkscape:connector-curvature="0"
+               id="path13349"
+               style="fill:#353535;fill-opacity:1;fill-rule:nonzero;stroke:none"
+               d="m 383.8027,202.665 -3.278,0.799 0.023,0.116 4.644,2.003 c 1.412,0.903 2.825,1.806 4.238,2.709 -0.903,-1.413 -1.807,-2.825 -2.71,-4.238 l -2.003,-4.643 -0.104,-0.035 z" />
+          </g>
+        </g>
+      </g>
+    </g>
+    <text
+       transform="rotate(-44.938424)"
+       id="text13997"
+       y="326.69958"
+       x="-148.62828"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:21.33333397px;line-height:100%;font-family:'ACaslon Regular';-inkscape-font-specification:'ACaslon Regular, ';letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;fill:#aaaaaa;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       xml:space="preserve"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Arial;-inkscape-font-specification:'Arial Bold';letter-spacing:0px;fill:#aaaaaa;fill-opacity:1;stroke:none"
+         y="326.69958"
+         x="-148.62828"
+         id="tspan13995"
+         sodipodi:role="line">Better QoE</tspan></text>
+  </g>
 </svg>
