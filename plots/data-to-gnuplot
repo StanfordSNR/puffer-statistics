@@ -5,10 +5,10 @@ use strict;
 print <<'END';
 set xlabel "Time spent stalled (%)" 
 set xlabel  offset character 0, 0.75, 0 font "" textcolor lt -1 norotate
-set xrange [ 1.3:0.47 ] reverse writeback
+set xrange [ *:* ] reverse writeback
 set ylabel "Average SSIM (dB)" 
 set ylabel  offset character 3, 0, 0 font "" textcolor lt -1 rotate
-set yrange [ 13.35:15.65 ] noreverse writeback
+set yrange [ *:* ] noreverse writeback
 set border 3 front lt black linewidth 1.000 dashtype solid
 set xtics border out scale 0.5,0.5 offset 0,0.5 nomirror norotate  autojustify
 set ytics border out scale 0.5,0.5 offset 0.25,0 nomirror norotate  autojustify
@@ -22,10 +22,10 @@ END
 my $n = 0;
 
 my %colors = (Tetra => 0xd62728,
-	      q{MPC-HM} => 0x1f77b4,
-	      q{RobustMPC-HM} => 0x8c564b,
-	      BBA => 0x2ca02c,
-	      Pensieve => 0x9467bd);
+	      q{Tetra-February} => 0x1f77b4,
+	      q{Tetra-March} => 0x8c564b,
+	      q{Tetra-April} => 0x2ca02c,
+	      q{Tetra-May} => 0x9467bd);
 
 my @data;
 
@@ -37,9 +37,7 @@ while (<>) {
   s{;}{}g;
   s{,}{}g;
   my ($name, $stall_low, $stall_high, $stall_mean, $ssim_low, $ssim_high, $ssim_mean) = (split)[0,5,7,9,13,15,17];
-  if ($name eq q{Puffer}) {
-      $name = q{Tetra};
-  }
+  $name =~ s{Puffer}{Tetra}g;
 
   push @data, qq{$stall_mean $ssim_mean $stall_low $stall_high $ssim_low $ssim_high $colors{$name} "$name"};
 }
