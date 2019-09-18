@@ -8,12 +8,12 @@
    xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   width="600"
-   height="480"
-   viewBox="0 0 600 480"
+   width="502.06"
+   height="439.91501"
+   viewBox="0 0 502.06 439.91501"
    version="1.1"
    id="svg2185"
-   sodipodi:docname="testprimary.svg"
+   sodipodi:docname="primary.svg"
    inkscape:version="0.92.4 (5da689c313, 2019-01-14)">
   <metadata
      id="metadata2191">
@@ -32,94 +32,114 @@
     <defs
        id="defs2010">
       <circle
-         stroke="currentColor"
-         stroke-width="0.5"
          r="0.5"
-         id="gpDot" />
+         id="gpDot"
+         cx="0"
+         cy="0"
+         style="stroke:currentColor;stroke-width:0.5" />
       <path
-         d="M-1,0 h2 M0,-1 v2"
-         stroke="currentColor"
-         stroke-width="0.133"
-         id="gpPt0" />
+         d="M -1,0 H 1 M 0,-1 v 2"
+         id="gpPt0"
+         inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
       <path
-         d="M-1,-1 L1,1 M1,-1 L-1,1"
-         stroke="currentColor"
-         stroke-width="0.133"
-         id="gpPt1" />
+         d="M -1,-1 1,1 M 1,-1 -1,1"
+         id="gpPt1"
+         inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
       <path
-         d="M-1,0 L1,0 M0,-1 L0,1 M-1,-1 L1,1 M-1,1 L1,-1"
-         stroke="currentColor"
-         stroke-width="0.133"
-         id="gpPt2" />
+         d="M -1,0 H 1 M 0,-1 v 2 m -1,-2 2,2 m -2,0 2,-2"
+         id="gpPt2"
+         inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
       <rect
          height="2"
          width="2"
          y="-1"
          x="-1"
-         stroke="currentColor"
-         stroke-width="0.133"
-         id="gpPt3" />
+         id="gpPt3"
+         style="stroke:currentColor;stroke-width:0.133" />
       <rect
          height="2"
          width="2"
          y="-1"
          x="-1"
-         fill="currentColor"
-         stroke="currentColor"
-         stroke-width="0.133"
-         id="gpPt4" />
+         id="gpPt4"
+         style="fill:currentColor;stroke:currentColor;stroke-width:0.133" />
       <circle
          r="1"
          cy="0"
          cx="0"
-         stroke="currentColor"
-         stroke-width="0.133"
-         id="gpPt5" />
+         id="gpPt5"
+         style="stroke:currentColor;stroke-width:0.133" />
       <use
-         stroke="none"
-         fill="currentColor"
          id="gpPt6"
-         xlink:href="#gpPt5" />
+         xlink:href="#gpPt5"
+         style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
       <path
-         d="M0,-1.33 L-1.33,0.67 L1.33,0.67 z"
-         stroke="currentColor"
-         stroke-width="0.133"
-         id="gpPt7" />
+         d="m 0,-1.33 -1.33,2 h 2.66 z"
+         id="gpPt7"
+         inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
       <use
-         stroke="none"
-         fill="currentColor"
          id="gpPt8"
-         xlink:href="#gpPt7" />
+         xlink:href="#gpPt7"
+         style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
       <use
-         transform="rotate(180)"
-         stroke="currentColor"
+         transform="scale(-1)"
          id="gpPt9"
-         xlink:href="#gpPt7" />
+         xlink:href="#gpPt7"
+         style="stroke:currentColor"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
       <use
-         stroke="none"
-         fill="currentColor"
          id="gpPt10"
-         xlink:href="#gpPt9" />
+         xlink:href="#gpPt9"
+         style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
       <use
          transform="rotate(45)"
-         stroke="currentColor"
          id="gpPt11"
-         xlink:href="#gpPt3" />
+         xlink:href="#gpPt3"
+         style="stroke:currentColor"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
       <use
-         stroke="none"
-         fill="currentColor"
          id="gpPt12"
-         xlink:href="#gpPt11" />
+         xlink:href="#gpPt11"
+         style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
       <path
-         d="M0,1.330 L1.265,0.411 L0.782,-1.067 L-0.782,-1.076 L-1.265,0.411 z"
-         stroke="currentColor"
-         stroke-width="0.133"
-         id="gpPt13" />
+         d="M 0,1.33 1.265,0.411 0.782,-1.067 -0.782,-1.076 -1.265,0.411 Z"
+         id="gpPt13"
+         inkscape:connector-curvature="0"
+         style="stroke:currentColor;stroke-width:0.133" />
       <use
-         stroke="none"
-         fill="currentColor"
          id="gpPt14"
-         xlink:href="#gpPt13" />
+         xlink:href="#gpPt13"
+         style="fill:currentColor;stroke:none"
+         x="0"
+         y="0"
+         width="100%"
+         height="100%" />
       <filter
          width="1"
          height="1"
@@ -172,109 +192,106 @@
      id="namedview2187"
      showgrid="false"
      inkscape:zoom="1.7666667"
-     inkscape:cx="244.16"
-     inkscape:cy="243.52115"
+     inkscape:cx="244.07472"
+     inkscape:cy="229.96492"
      inkscape:window-x="0"
      inkscape:window-y="25"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg2185" />
+     inkscape:current-layer="svg2185"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0" />
   <title
      id="title1978">Gnuplot</title>
   <desc
      id="desc1980">Produced by GNUPLOT 5.2 patchlevel 6 </desc>
-  <rect
-     style="fill:none"
-     id="rect1982"
-     height="480"
-     width="600"
-     y="0"
-     x="0" />
   <path
-     d="M 156.5,351.7 H 149"
+     d="m 100.66,321.775 h -7.5"
      id="path2014"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:end;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2018"
-     x="138.5"
-     y="358.20001">
+     x="82.660004"
+     y="328.27502">
     <tspan
        style="font-family:Times"
        id="tspan2016">16.25</tspan>
   </text>
   <path
-     d="M 156.5,233.5 H 149"
+     d="m 100.66,203.575 h -7.5"
      id="path2024"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:end;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2028"
-     x="138.5"
-     y="240">
+     x="82.660004"
+     y="210.075">
     <tspan
        style="font-family:Times"
        id="tspan2026">16.5</tspan>
   </text>
   <path
-     d="M 156.5,115.2 H 149"
+     d="m 100.66,85.275 h -7.5"
      id="path2034"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:end;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2038"
-     x="138.5"
-     y="121.7">
+     x="82.660004"
+     y="91.774994">
     <tspan
        style="font-family:Times"
        id="tspan2036">16.75</tspan>
   </text>
   <path
-     d="m 529.9,399 v 7.5"
+     d="m 474.06,369.075 v 7.5"
      id="path2044"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2048"
-     x="529.90002"
-     y="428">
+     x="474.06003"
+     y="398.07501">
     <tspan
        style="font-family:Times"
        id="tspan2046">0.1</tspan>
   </text>
   <path
-     d="m 343.2,399 v 7.5"
+     d="m 287.36,369.075 v 7.5"
      id="path2054"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2058"
-     x="343.20001"
-     y="428">
+     x="287.36002"
+     y="398.07501">
     <tspan
        style="font-family:Times"
        id="tspan2056">0.2</tspan>
   </text>
   <path
-     d="m 156.5,399 v 7.5"
+     d="m 100.66,369.075 v 7.5"
      id="path2064"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2068"
-     x="156.5"
-     y="428">
+     x="100.66"
+     y="398.07501">
     <tspan
        style="font-family:Times"
        id="tspan2066">0.3</tspan>
   </text>
   <path
-     d="M 156.5,30.1 V 399 h 401.4 m 0,-368.9 m -401.4,0"
+     d="m 100.66,0.175 v 368.9 h 401.4 m 0,-368.9 m -401.4,0"
      id="path2076"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
@@ -282,8 +299,8 @@
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2082"
      transform="rotate(-90)"
-     x="-214.60001"
-     y="69.5">
+     x="-184.675"
+     y="13.66">
     <tspan
        style="font-family:Times"
        id="tspan2080">Average SSIM (dB)</tspan>
@@ -291,8 +308,8 @@
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2090"
-     x="357.20001"
-     y="465.5">
+     x="301.36002"
+     y="435.57501">
     <tspan
        style="font-family:Times"
        id="tspan2088">Time spent stalled (%)</tspan>
@@ -301,52 +318,52 @@
      style="color:#000000;fill:none;stroke:#d62728;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2102"
-     d="M 487.8,83.1 V 30.8 M 484,83.1 h 7.5 M 484,30.8 h 7.5" />
+     d="m 431.96,53.175 v -52.3 m -3.8,52.3 h 7.5 m -7.5,-52.3 h 7.5" />
   <path
      style="color:#000000;fill:none;stroke:#1f77b4;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2104"
-     d="M 257,126.3 V 69.9 m -3.8,56.4 h 7.5 m -7.5,-56.4 h 7.5" />
+     d="m 201.16,96.375 v -56.4 m -3.8,56.4 h 7.5 m -7.5,-56.4 h 7.5" />
   <path
      style="color:#000000;fill:none;stroke:#8c564b;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2106"
-     d="m 530.3,393.7 v -62.1 m -3.8,62.1 h 7.5 m -7.5,-62.1 h 7.5" />
+     d="m 474.46,363.775 v -62.1 m -3.8,62.1 h 7.5 m -7.5,-62.1 h 7.5" />
   <path
      style="color:#000000;fill:none;stroke:#9467bd;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2108"
-     d="m 404.7,289.2 v -66.7 m -3.8,66.7 h 7.5 m -7.5,-66.7 h 7.5" />
+     d="m 348.86,259.275 v -66.7 m -3.8,66.7 h 7.5 m -7.5,-66.7 h 7.5" />
   <path
      style="color:#000000;fill:none;stroke:#2ca02c;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2110"
-     d="M 370.8,141.4 V 84.8 m -3.8,56.6 h 7.5 M 367,84.8 h 7.5" />
+     d="m 314.96,111.475 v -56.6 m -3.8,56.6 h 7.5 m -7.5,-56.6 h 7.5" />
   <path
      style="color:#000000;fill:none;stroke:#d62728;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2112"
-     d="m 509.4,57.1 h -43.9 m 43.9,3.8 v -7.5 m -43.9,7.5 v -7.5" />
+     d="m 453.56,27.175 h -43.9 m 43.9,3.8 v -7.5 m -43.9,7.5 v -7.5" />
   <path
      style="color:#000000;fill:none;stroke:#1f77b4;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2114"
-     d="M 313.4,98.3 H 177.8 m 135.6,3.8 v -7.5 m -135.6,7.5 v -7.5" />
+     d="m 257.56,68.375 h -135.6 m 135.6,3.8 v -7.5 m -135.6,7.5 v -7.5" />
   <path
      style="color:#000000;fill:none;stroke:#8c564b;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2116"
-     d="m 552.7,362.9 h -46.2 m 46.2,3.8 v -7.5 m -46.2,7.5 v -7.5" />
+     d="m 496.86,332.975 h -46.2 m 46.2,3.8 v -7.5 m -46.2,7.5 v -7.5" />
   <path
      style="color:#000000;fill:none;stroke:#9467bd;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2118"
-     d="m 433.8,256.1 h -59.1 m 59.1,3.8 v -7.5 m -59.1,7.5 v -7.5" />
+     d="m 377.96,226.175 h -59.1 m 59.1,3.8 v -7.5 m -59.1,7.5 v -7.5" />
   <path
      style="color:#000000;fill:none;stroke:#2ca02c;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      inkscape:connector-curvature="0"
      id="path2120"
-     d="m 401.3,113.3 h -63.8 m 63.8,3.8 v -7.5 m -63.8,7.5 v -7.5" />
+     d="m 345.46,83.375 h -63.8 m 63.8,3.8 v -7.5 m -63.8,7.5 v -7.5" />
   <use
      height="100%"
      width="100%"
@@ -354,7 +371,7 @@
      x="0"
      style="color:#d62728;fill:none;stroke:#000000;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      id="use2122"
-     transform="matrix(2.48,0,0,2.48,487.8,57.1)"
+     transform="matrix(2.48,0,0,2.48,431.96,27.175)"
      xlink:href="#gpPt6" />
   <use
      height="100%"
@@ -363,7 +380,7 @@
      x="0"
      style="color:#1f77b4;fill:none;stroke:#000000;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      id="use2124"
-     transform="matrix(2.48,0,0,2.48,257,98.3)"
+     transform="matrix(2.48,0,0,2.48,201.16,68.375)"
      xlink:href="#gpPt6" />
   <use
      height="100%"
@@ -372,7 +389,7 @@
      x="0"
      style="color:#8c564b;fill:none;stroke:#000000;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      id="use2126"
-     transform="matrix(2.48,0,0,2.48,530.3,362.9)"
+     transform="matrix(2.48,0,0,2.48,474.46,332.975)"
      xlink:href="#gpPt6" />
   <use
      height="100%"
@@ -381,7 +398,7 @@
      x="0"
      style="color:#9467bd;fill:none;stroke:#000000;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      id="use2128"
-     transform="matrix(2.48,0,0,2.48,404.7,256.1)"
+     transform="matrix(2.48,0,0,2.48,348.86,226.175)"
      xlink:href="#gpPt6" />
   <use
      height="100%"
@@ -390,13 +407,13 @@
      x="0"
      style="color:#2ca02c;fill:none;stroke:#000000;stroke-width:1.75;stroke-linecap:butt;stroke-linejoin:miter"
      id="use2130"
-     transform="matrix(2.48,0,0,2.48,370.8,113.3)"
+     transform="matrix(2.48,0,0,2.48,314.96,83.375)"
      xlink:href="#gpPt6" />
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2141"
-     x="462.66791"
-     y="78.599998">
+     x="406.82791"
+     y="48.674999">
     <tspan
        id="tspan2139"
        style="font-family:Times">Tetra</tspan>
@@ -404,8 +421,8 @@
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2147"
-     x="212.13208"
-     y="120.06416">
+     x="156.29208"
+     y="90.13916">
     <tspan
        id="tspan2145"
        style="font-family:Times">MPC-HM</tspan>
@@ -413,8 +430,8 @@
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2153"
-     x="457.73395"
-     y="386.09811">
+     x="401.89395"
+     y="356.17313">
     <tspan
        id="tspan2151"
        style="font-family:Times">RobustMPC-HM</tspan>
@@ -422,8 +439,8 @@
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2159"
-     x="364.70001"
-     y="277.60001">
+     x="308.86002"
+     y="247.675">
     <tspan
        id="tspan2157"
        style="font-family:Times">Pensieve</tspan>
@@ -431,14 +448,14 @@
   <text
      style="color:#000000;font-size:20px;font-family:Times;text-anchor:middle;fill:#000000;stroke:none;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter"
      id="text2165"
-     x="346.79999"
-     y="134.8">
+     x="290.95999"
+     y="104.875">
     <tspan
        id="tspan2163"
        style="font-family:Times">BBA</tspan>
   </text>
   <path
-     d="M 156.5,30.1 V 399 h 401.4 m 0,-368.9 m -401.4,0"
+     d="m 100.66,0.175 v 368.9 h 401.4 m 0,-368.9 m -401.4,0"
      id="path2178"
      inkscape:connector-curvature="0"
      style="color:#000000;fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter" />
