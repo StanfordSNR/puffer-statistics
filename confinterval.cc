@@ -196,7 +196,7 @@ class Statistics {
     vector<double> all_watch_times{};
 
     SchemeStats puffer{};
-    SchemeStats mpc{}, robust_mpc{}, pensieve{}, bba{};
+    SchemeStats mpc{}, robust_mpc{}, pensieve{}, bba{}, linear{};
 
 public:
     void parse_stdin() {
@@ -243,13 +243,14 @@ public:
 
 	    const uint64_t ts = to_uint64(ts_str);
 
-	    if ((ts >= 1547884800 and ts < 1565193009) or (ts > 1567206883)) {
+	    if ((ts > 1567206883)) {
 		// analyze this period: January 19-August 7, and August 30 onward
 		// this is the primary study period
 	    } else {
 		continue;
 	    }
 
+	    /*
 	    split_on_char(mean_delivery_rate, '=', scratch);
 	    if (scratch[0] != "mean_delivery_rate"sv) {
 		throw runtime_error("field mismatch");
@@ -258,6 +259,7 @@ public:
 	    if (delivery_rate > (6000000.0/8.0)) {
 		continue;
 	    }
+	    */
 
 	    split_on_char(time_after_startup, '=', scratch);
 	    if (scratch[0] != "total_after_startup"sv) {
@@ -308,6 +310,8 @@ public:
 		the_scheme = &pensieve;
 	    } else if (scheme == "linear_bba/bbr"sv) {
 		the_scheme = &bba;
+	    } else if (scheme == "puffer_ttp_linear/bbr"sv) {
+		the_scheme = &linear;
 	    }
 
 	    if (the_scheme) {
@@ -413,6 +417,7 @@ public:
 	Realizations robust_mpc_r{"RobustMPC-HM", robust_mpc};
 	Realizations pensieve_r{"Pensieve", pensieve};
 	Realizations bba_r{"BBA", bba};
+	Realizations linear_r{"Puffer-Linear", linear};
 
 	for (unsigned int i = 0; i < iteration_count; i++) {
 	    if (i % 10 == 0) {
@@ -424,6 +429,7 @@ public:
 	    robust_mpc_r.add_realization(all_watch_times, prng);
 	    pensieve_r.add_realization(all_watch_times, prng);
 	    bba_r.add_realization(all_watch_times, prng);
+	    linear_r.add_realization(all_watch_times, prng);
 	}
 	cerr << "\n";
 
@@ -433,12 +439,14 @@ public:
 	robust_mpc_r.print_samplesize();
 	pensieve_r.print_samplesize();
 	bba_r.print_samplesize();
+	linear_r.print_samplesize();
 
 	puffer_r.print_summary();
 	mpc_r.print_summary();
 	robust_mpc_r.print_summary();
 	pensieve_r.print_summary();
 	bba_r.print_summary();
+	linear_r.print_summary();
     }
 };
 

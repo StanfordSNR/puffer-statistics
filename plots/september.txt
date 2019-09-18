@@ -1,0 +1,10 @@
+#Puffer considered 14956 sessions, stall/watch hours: 4.125/2875.238
+#MPC-HM considered 15361 sessions, stall/watch hours: 8.971/2719.811
+#RobustMPC-HM considered 15053 sessions, stall/watch hours: 2.403/2658.286
+#Pensieve considered 14972 sessions, stall/watch hours: 5.731/2836.269
+#BBA considered 14552 sessions, stall/watch hours: 5.146/2662.232
+Puffer stall ratio (95% CI): 0.11706795% .. 0.19262548%, mean= 0.15277651; SSIM (95% CI): 15.86578648 .. 15.96100048, mean= 15.91313255; SSIMvar (95% CI): 0.67182247 .. 0.68623902, mean= 0.67903075
+MPC-HM stall ratio (95% CI): 0.27950678% .. 0.40987470%, mean= 0.34281115; SSIM (95% CI): 15.70779706 .. 15.79629568, mean= 15.75182095; SSIMvar (95% CI): 0.71869481 .. 0.73197850, mean= 0.72533666
+RobustMPC-HM stall ratio (95% CI): 0.06999467% .. 0.12127515%, mean= 0.09401864; SSIM (95% CI): 14.02128983 .. 14.11474646, mean= 14.06776676; SSIMvar (95% CI): 0.89105283 .. 0.90856750, mean= 0.89981017
+Pensieve stall ratio (95% CI): 0.17343846% .. 0.27516415%, mean= 0.22104656; SSIM (95% CI): 15.53399061 .. 15.63624953, mean= 15.58481911; SSIMvar (95% CI): 0.98402624 .. 1.00686122, mean= 0.99544373
+BBA stall ratio (95% CI): 0.15263472% .. 0.23304917%, mean= 0.19079725; SSIM (95% CI): 14.61500946 .. 14.69618926, mean= 14.65540968; SSIMvar (95% CI): 1.02234519 .. 1.04046265, mean= 1.03140392
