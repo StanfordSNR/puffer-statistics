@@ -250,6 +250,7 @@ public:
 		continue;
 	    }
 
+	    /*
 	    split_on_char(mean_delivery_rate, '=', scratch);
 	    if (scratch[0] != "mean_delivery_rate"sv) {
 		throw runtime_error("field mismatch");
@@ -258,6 +259,7 @@ public:
 	    if (delivery_rate > (6000000.0/8.0)) {
 		continue;
 	    }
+	    */
 
 	    split_on_char(time_after_startup, '=', scratch);
 	    if (scratch[0] != "total_after_startup"sv) {
