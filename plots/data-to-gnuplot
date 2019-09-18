@@ -12,7 +12,7 @@ set yrange [ 13.35:15.65 ] noreverse writeback
 set border 3 front lt black linewidth 1.000 dashtype solid
 set xtics border out scale 0.5,0.5 offset 0,0.5 nomirror norotate  autojustify
 set ytics border out scale 0.5,0.5 offset 0.25,0 nomirror norotate  autojustify
-set xtics 0.25
+set xtics 0.1
 set ytics 0.5
 set font "Times,10"
 unset key
@@ -25,7 +25,8 @@ my %colors = (Tetra => 0xd62728,
 	      q{MPC-HM} => 0x1f77b4,
 	      q{RobustMPC-HM} => 0x8c564b,
 	      BBA => 0x2ca02c,
-	      Pensieve => 0x9467bd);
+	      Pensieve => 0x9467bd,
+	      TetraEmu => 0xe377c2);
 
 my @data;
 

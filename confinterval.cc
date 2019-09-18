@@ -197,6 +197,7 @@ class Statistics {
 
     SchemeStats puffer{};
     SchemeStats mpc{}, robust_mpc{}, pensieve{}, bba{};
+    SchemeStats puffer_emu{};
 
 public:
     void parse_stdin() {
@@ -243,9 +244,8 @@ public:
 
 	    const uint64_t ts = to_uint64(ts_str);
 
-	    if ((ts >= 1547884800 and ts < 1565193009) or (ts > 1567206883)) {
-		// analyze this period: January 19-August 7, and August 30 onward
-		// this is the primary study period
+	    if (ts >= 1548489600 and ts <= 1554278400) {
+		// emu-trained period
 	    } else {
 		continue;
 	    }
@@ -308,6 +308,8 @@ public:
 		the_scheme = &pensieve;
 	    } else if (scheme == "linear_bba/bbr"sv) {
 		the_scheme = &bba;
+	    } else if (scheme == "puffer_ttp_emu/bbr"sv) {
+		the_scheme = &puffer_emu;
 	    }
 
 	    if (the_scheme) {
@@ -413,6 +415,7 @@ public:
 	Realizations robust_mpc_r{"RobustMPC-HM", robust_mpc};
 	Realizations pensieve_r{"Pensieve", pensieve};
 	Realizations bba_r{"BBA", bba};
+	Realizations emu_r{"TetraEmu", puffer_emu};
 
 	for (unsigned int i = 0; i < iteration_count; i++) {
 	    if (i % 10 == 0) {
@@ -424,6 +427,7 @@ public:
 	    robust_mpc_r.add_realization(all_watch_times, prng);
 	    pensieve_r.add_realization(all_watch_times, prng);
 	    bba_r.add_realization(all_watch_times, prng);
+	    emu_r.add_realization(all_watch_times, prng);
 	}
 	cerr << "\n";
 
@@ -433,12 +437,14 @@ public:
 	robust_mpc_r.print_samplesize();
 	pensieve_r.print_samplesize();
 	bba_r.print_samplesize();
+	emu_r.print_samplesize();
 
 	puffer_r.print_summary();
 	mpc_r.print_summary();
 	robust_mpc_r.print_summary();
 	pensieve_r.print_summary();
 	bba_r.print_summary();
+	emu_r.print_summary();
     }
 };
 
