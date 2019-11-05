@@ -31,3 +31,4 @@ Makefile.in
 /parser
 /analyze
 /confinterval
+/dump
