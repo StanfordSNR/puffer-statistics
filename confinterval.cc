@@ -378,13 +378,29 @@ class Statistics {
             if (simulated_watch_time_binned == 0) { // watch_time_bin already throws if bin < 2
                 throw runtime_error("no small session stall_ratios?");
             }
+            
+            /* If simulated bin is empty, draw from aggregate over left and right bins; throw if both empty */
+            const size_t left_num_stall_ratio_samples = simulated_watch_time_binned > scheme.MIN_BIN ? 
+                                                        scheme.binned_stall_ratios.at(simulated_watch_time_binned - 1).size() 
+                                                        : 0;
+            const size_t right_num_stall_ratio_samples = simulated_watch_time_binned < scheme.MAX_BIN ? 
+                                                        scheme.binned_stall_ratios.at(simulated_watch_time_binned + 1).size() 
+                                                        : 0;
+            if (left_num_stall_ratio_samples == 0 && right_num_stall_ratio_samples == 0) {
+                throw runtime_error("no nonempty bins from which to draw stall_ratio");
+            }
 
-            // bin corresponding to the simulated watch time is empty => 
-            // draw stall ratio from bin to the left
-            simulated_watch_time_binned--; 
-            size_t num_stall_ratio_samples = scheme.binned_stall_ratios.at(simulated_watch_time_binned).size();
-            uniform_int_distribution<> possible_stall_ratio_index(0, num_stall_ratio_samples - 1);
-            const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(possible_stall_ratio_index(prng)); 
+            uniform_int_distribution<> agg_possible_stall_ratio_index(0, left_num_stall_ratio_samples + right_num_stall_ratio_samples - 1); 
+            const unsigned agg_stall_ratio_index = agg_possible_stall_ratio_index(prng);
+            unsigned stall_ratio_index;   // index relative to nsamples in chosen bin
+            if (agg_stall_ratio_index >= left_num_stall_ratio_samples) {    // right bin
+                simulated_watch_time_binned++;
+                stall_ratio_index = agg_stall_ratio_index - left_num_stall_ratio_samples;
+            } else {                                                        // left bin
+                simulated_watch_time_binned--; 
+                stall_ratio_index = agg_stall_ratio_index;
+            }
+            const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(stall_ratio_index);
 
             return {simulated_watch_time, simulated_stall_time};
         }
