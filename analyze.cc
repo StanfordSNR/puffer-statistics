@@ -924,7 +924,7 @@ class Parser {
 
         /* Summarize a list of Videosents, ignoring SSIM ~ 1 */
         // normal_ssim_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation]
-        tuple<double, double, double, double, double, double> video_summarize(const session_key & key) const {
+        tuple<size_t, size_t, double, double, double, double> video_summarize(const session_key & key) const {
             const auto videosent_it = chunks.find(key);
             if (videosent_it == chunks.end()) {
                 return { -1, -1, -1, -1, -1, -1 };
