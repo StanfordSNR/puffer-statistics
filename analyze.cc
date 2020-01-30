@@ -48,11 +48,12 @@ size_t memcheck() {
     return usage.ru_maxrss;
 }
 
+// if delimiter is at end, adds empty string to ret
 void split_on_char(const string_view str, const char ch_to_find, vector<string_view> & ret) {
     ret.clear();
 
     bool in_double_quoted_string = false;
-    unsigned int field_start = 0;
+    unsigned int field_start = 0;   // start of next token
     for (unsigned int i = 0; i < str.size(); i++) {
         const char ch = str[i];
         if (ch == '"') {
@@ -225,13 +226,7 @@ struct Event {
                     if (not bad) {
                         bad = true;
                         cerr << "error trying to set contradictory value: ";
-                        cerr << "init_id=" << init_id.value_or(-1)
-                            << ", expt_id=" << expt_id.value_or(-1)
-                            << ", user_id=" << user_id.value_or(-1)
-                            << ", type=" << (type.has_value() ? int(type.value()) : 'x')
-                            << ", buffer=" << buffer.value_or(-1.0)
-                            << ", cum_rebuf=" << cum_rebuf.value_or(-1.0)
-                            << "\n";
+                        cerr << *this;   
                     }
                     //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
                 }
@@ -260,7 +255,18 @@ struct Event {
             throw runtime_error( "unknown key: " + string(key) );
         }
     }
+        
+    friend std::ostream& operator<<(std::ostream& out, const Event& s); 
 };
+std::ostream& operator<< (std::ostream& out, const Event& s) {        
+    return out << "init_id=" << s.init_id.value_or(-1)
+    << ", expt_id=" << s.expt_id.value_or(-1)
+    << ", user_id=" << s.user_id.value_or(-1)
+    << ", type=" << (s.type.has_value() ? int(s.type.value()) : 'x')
+    << ", buffer=" << s.buffer.value_or(-1.0)
+    << ", cum_rebuf=" << s.cum_rebuf.value_or(-1.0)
+    << "\n";
+}
 
 struct Sysinfo {
     optional<uint32_t> browser_id{};
@@ -296,10 +302,7 @@ struct Sysinfo {
                     if (not bad) {
                         bad = true;
                         cerr << "error trying to set contradictory sysinfo value: ";
-                        cerr << "init_id=" << init_id.value_or(-1)
-                            << ", expt_id=" << expt_id.value_or(-1)
-                            << ", user_id=" << user_id.value_or(-1)
-                            << "\n";
+                        cerr << *this; 
                     }
                     //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
                 }
@@ -335,7 +338,17 @@ struct Sysinfo {
             throw runtime_error( "unknown key: " + string(key) );
         }
     }
+    friend std::ostream& operator<<(std::ostream& out, const Sysinfo& s); 
 };
+std::ostream& operator<< (std::ostream& out, const Sysinfo& s) {        
+    return out << "init_id=" << s.init_id.value_or(-1)
+    << ", expt_id=" << s.expt_id.value_or(-1)
+    << ", user_id=" << s.user_id.value_or(-1)
+    << ", browser_id=" << (s.browser_id.value_or(-1))
+    << ", os=" << s.os.value_or(-1.0)
+    << ", ip=" << s.ip.value_or(-1.0)
+    << "\n";
+}
 
 struct VideoSent {
     optional<float> ssim_index{};
@@ -344,6 +357,7 @@ struct VideoSent {
     bool bad = false;
 
     bool complete() const {
+        // ASK: size is optional?
         return ssim_index and delivery_rate and expt_id and init_id and user_id;
     }
 
@@ -367,19 +381,13 @@ struct VideoSent {
                     if (not bad) {
                         bad = true;
                         cerr << "error trying to set contradictory sysinfo value: ";
-                        cerr << "init_id=" << init_id.value_or(-1)
-                            << ", expt_id=" << expt_id.value_or(-1)
-                            << ", user_id=" << user_id.value_or(-1)
-                            << ", ssim_index=" << ssim_index.value_or(-1)
-                            << ", delivery_rate=" << delivery_rate.value_or(-1)
-                            << ", size=" << size.value_or(-1)
-                            << "\n";
+                        cerr << *this; 
                     }
                     //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
                 }
             }
         }
-
+    
     void insert_unique(const string_view key, const string_view value,
             string_table & usernames ) {
         if (key == "init_id"sv) {
@@ -406,7 +414,17 @@ struct VideoSent {
             throw runtime_error( "unknown key: " + string(key) );
         }
     }
+    friend std::ostream& operator<<(std::ostream& out, const VideoSent& s); 
 };
+std::ostream& operator<< (std::ostream& out, const VideoSent& s) {        
+    return out << "init_id=" << s.init_id.value_or(-1)
+        << ", expt_id=" << s.expt_id.value_or(-1)
+        << ", user_id=" << s.user_id.value_or(-1)
+        << ", ssim_index=" << s.ssim_index.value_or(-1)
+        << ", delivery_rate=" << s.delivery_rate.value_or(-1)
+        << ", size=" << s.size.value_or(-1)
+        << "\n";
+}
 
 struct Channel {
     constexpr static uint8_t COUNT = 6;
@@ -452,7 +470,10 @@ using event_table = map<uint64_t, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
 using video_sent_table = map<uint64_t, VideoSent>;
 
-double raw_ssim_to_db(const double raw_ssim) {
+#define MAX_SSIM 0.99999    // max acceptable raw SSIM (exclusive) 
+// ignore SSIM ~ 1
+optional<double> raw_ssim_to_db(const double raw_ssim) {
+    if (raw_ssim > MAX_SSIM) return nullopt; 
     return -10.0 * log10( 1 - raw_ssim );
 }
 
@@ -608,6 +629,7 @@ class Parser {
                         // server, channel, and ts 
                         const auto server_id = get_server_id(measurement_tag_set_fields);
                         const auto channel = get_channel(measurement_tag_set_fields);
+
                         client_buffer[server_id][channel][timestamp].insert_unique(key, value, usernames);
                     } else if ( measurement == "active_streams"sv ) {
                         // skip
@@ -660,12 +682,13 @@ class Parser {
 
         /* Group Events by stream (key is {init_id, expt_id, user_id, server, channel}) 
          * Ignore "bad" Events (field was set multiple times), throw for "incomplete" Events (field was never set)
-         * Store in sessions, along with timestamp for each Event */
+         * Store in sessions, along with timestamp for each Event, ordered by increasing timestamp */
         void accumulate_sessions() {
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
                 const size_t rss = memcheck() / 1024;
                 cerr << "session_server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
                 for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
+                    // iterates in increasing ts order
                     for (const auto & [ts,event] : client_buffer[server][channel]) {
                         if (event.bad) {
                             bad_count++;
@@ -737,6 +760,57 @@ class Parser {
             }
         }
 
+        // print a tuple of any size, promoting uint8_t
+        template<class Tuple, std::size_t N>
+        struct TuplePrinter {
+            static void print(const Tuple& t)
+            {
+                TuplePrinter<Tuple, N-1>::print(t);
+                std::cout << ", " << +std::get<N-1>(t);
+            }
+        };
+
+        template<class Tuple>
+        struct TuplePrinter<Tuple, 1> {
+            static void print(const Tuple& t)
+            {
+                std::cout << +std::get<0>(t);
+            }
+        };
+
+        template<class... Args>
+        void print(const std::tuple<Args...>& t)
+        {
+            std::cout << "(";
+            TuplePrinter<decltype(t), sizeof...(Args)>::print(t);
+            std::cout << ")\n";
+        }
+
+        void debug_print_grouped_data() {
+            cerr << "sessions:" << endl;
+            for ( const auto & [key, events] : sessions ) {
+                cerr << "session key: "; 
+                print(key);
+                for ( const auto & [ts, event] : events ) {
+                    cerr << ts << ", " << *event; 
+                }
+            }
+            cerr << "sysinfos:" << endl;
+            for ( const auto & [key, sysinfo] : sysinfos ) {
+                cerr << "session key: "; 
+                print(key);
+                cerr << sysinfo; 
+            }
+            cerr << "chunks:" << endl;
+            for ( const auto & [key, stream_chunks] : chunks ) {
+                cerr << "session key: "; 
+                print(key);
+                for ( const auto & [ts, videosent] : stream_chunks ) {
+                    cerr << ts << ", " << *videosent; 
+                }
+            }
+        }
+
         /* Corresponds to a line of analyze output; summarizes a stream */
         struct EventSummary {
             uint64_t base_time{0};
@@ -768,6 +842,9 @@ class Parser {
             unsigned int missing_sysinfo = 0;
             unsigned int missing_video_stats = 0;
 
+            size_t overall_chunks = 0;
+            size_t overall_high_ssim_chunks = 0;
+
             for ( auto & [key, events] : sessions ) {
                 /* find matching Sysinfo */
                 Sysinfo sysinfo{0,0,0,0,0,0};
@@ -795,14 +872,20 @@ class Parser {
                 const EventSummary summary = summarize(key, events);
 
                 /* find matching videosent stream */
-                const auto [mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation] = video_summarize(key);
+                const auto [normal_ssim_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation] = video_summarize(key);
+                const double mean_ssim = ssim_sum == -1 ? -1 : ssim_sum / normal_ssim_chunks;
+                const size_t high_ssim_chunks = total_chunks - normal_ssim_chunks;
 
                 if (mean_delivery_rate < 0 ) {
                     missing_video_stats++;
+                } else {
+                    overall_chunks += total_chunks;
+                    overall_high_ssim_chunks += high_ssim_chunks;
                 }
 
                 cout << fixed;
 
+                // ts from influx export include nanoseconds -- truncate to seconds
                 cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
                     << summary.scheme << " " << inet_ntoa({sysinfo.ip.value()})
                     << " " << ostable.reverse_map(sysinfo.os.value())
@@ -814,7 +897,9 @@ class Parser {
                     << " ssim_variation_db=" << ssim_variation
                     << " startup_delay=" << summary.cum_rebuf_at_startup
                     << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
-                    << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) << "\n";
+                    << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
+                    << " total_chunks=" << total_chunks
+                    << " high_ssim_chunks=" << high_ssim_chunks << "\n";
 
                 total_extent += summary.time_extent;
 
@@ -832,33 +917,46 @@ class Parser {
             }
 
             // mark summary lines with # so confinterval will ignore them
-            cout << "#num_sessions=" << sessions.size() << " good=" << good_sessions << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " missing_video_stats=" << missing_video_stats << " had_stall=" << had_stall << "\n";
+            cout << "#num_sessions=" << sessions.size() << " good=" << good_sessions << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " missing_video_stats=" << missing_video_stats << " had_stall=" << had_stall 
+                 << " overall_chunks=" << overall_chunks << " overall_high_ssim_chunks=" << overall_high_ssim_chunks << "\n";
             cout << "#total_extent=" << total_extent / 3600.0 << " total_time_after_startup=" << total_time_after_startup / 3600.0 << " total_stall_time=" << total_stall_time / 3600.0 << "\n";
         }
 
-        /* Summarize a list of Videosents */
-        tuple<double, double, double, double> video_summarize(const session_key & key) const {
+        /* Summarize a list of Videosents, ignoring SSIM ~ 1 */
+        // normal_ssim_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation]
+        tuple<double, double, double, double, double, double> video_summarize(const session_key & key) const {
             const auto videosent_it = chunks.find(key);
             if (videosent_it == chunks.end()) {
-                return { -1, -1, -1, -1 };
+                return { -1, -1, -1, -1, -1, -1 };
             }
-
-            double ssim_sum = 0;
-            double delivery_rate_sum = 0;
-            double bytes_sent_sum = 0;
-            optional<double> ssim_last{};
-            double ssim_absolute_variation_sum = 0;
 
             const vector<pair<uint64_t, const VideoSent *>> & chunk_stream = videosent_it->second;
 
-            for ( const auto [ts, videosent] : chunk_stream ) {
-                ssim_sum += videosent->ssim_index.value();
+            double ssim_sum = 0;    // raw index
+            double delivery_rate_sum = 0;
+            double bytes_sent_sum = 0;
+            optional<double> ssim_cur_db{};     // empty if index == 1
+            optional<double> ssim_last_db{};    // empty if no previous, or previous had index == 1
+            double ssim_absolute_variation_sum = 0;
+            size_t num_ssim_samples = chunk_stream.size();
+            /* variation is calculated between each consecutive pair of chunks */
+            size_t num_ssim_var_samples = chunk_stream.size() - 1;  
 
-                if (ssim_last.has_value()) {
-                    ssim_absolute_variation_sum += abs(raw_ssim_to_db(videosent->ssim_index.value()) - raw_ssim_to_db(ssim_last.value()));
+            for ( const auto [ts, videosent] : chunk_stream ) {
+                ssim_cur_db = raw_ssim_to_db(videosent->ssim_index.value());
+                if (ssim_cur_db.has_value()) {
+                    ssim_sum += videosent->ssim_index.value();
+                } else {
+                    num_ssim_samples--; // for ssim_mean, ignore chunk with SSIM == 1
                 }
 
-                ssim_last.emplace(videosent->ssim_index.value());
+                if (ssim_cur_db.has_value() && ssim_last_db.has_value()) {  
+                    ssim_absolute_variation_sum += abs(ssim_cur_db.value() - ssim_last_db.value());
+                } else {
+                    num_ssim_var_samples--; // for ssim_var, ignore pair containing chunk with SSIM == 1
+                }
+
+                ssim_last_db = ssim_cur_db;
 
                 delivery_rate_sum += videosent->delivery_rate.value();
                 bytes_sent_sum += videosent->size.value();
@@ -867,11 +965,11 @@ class Parser {
             const double average_bitrate = 8 * bytes_sent_sum / (2.002 * chunk_stream.size());
 
             double average_absolute_ssim_variation = -1;
-            if (chunk_stream.size() > 1) {
-                average_absolute_ssim_variation = ssim_absolute_variation_sum / (chunk_stream.size() - 1);
+            if (num_ssim_var_samples > 0) {
+                average_absolute_ssim_variation = ssim_absolute_variation_sum / num_ssim_var_samples;
             }
 
-            return { ssim_sum / chunk_stream.size(), delivery_rate_sum / chunk_stream.size(), average_bitrate, average_absolute_ssim_variation };
+            return { num_ssim_samples, chunk_stream.size(), ssim_sum, delivery_rate_sum / chunk_stream.size(), average_bitrate, average_absolute_ssim_variation };
         }
 
         /* Summarize a list of events corresponding to a stream. */
@@ -1006,7 +1104,7 @@ void analyze_main(const string & experiment_dump_filename) {
     parser.parse_stdin();
     parser.accumulate_sessions();
     parser.accumulate_sysinfos();
-    parser.accumulate_video_sents();
+    parser.accumulate_video_sents(); 
     parser.analyze_sessions();
 }
 
