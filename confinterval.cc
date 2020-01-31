@@ -746,12 +746,12 @@ void print_usage(const string & program) {
     cerr << "Usage: " << program << " <scheme_group> <scheme_days_action> <scheme_days_filename> <session_speed>\n" 
             "scheme_group: Either primary or vintages (for now)\n"
             "scheme_days_action: Either --read-scheme-days or --write-scheme-days.\n"
-            "Scheme_days is a list of days each scheme has run.\n"
+            "Scheme_days is a list of days each scheme has run, used to determine the dates to analyze.\n"
             "To read this list from an already populated file, select read.\n"
             "To form this list from the input data and write to file for later use, select write.\n"
-            "(No confidence intervals will be calculated if write is selected, since scheme days is needed to determine the dates to analyze).\n"
+            "(No confidence intervals will be calculated if write is selected, since scheme_days is needed to determine the dates to analyze).\n"
             "scheme_days_filename: File from which to read or write scheme_days.\n"
-            "session_speed: slow-sessions or all-sessions\n";
+            "session_speed: --slow-sessions or --all-sessions\n";
 }
 
 int main(int argc, char *argv[]) { 
@@ -760,44 +760,25 @@ int main(int argc, char *argv[]) {
             abort();
         }
 
-        if (argc < 2) { 
+        if (argc != 5) { 
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
 
-        bool store_scheme_days = false;
-        bool slow_sessions = false;
-        const option longopts[] = {
-            {"store-scheme-days", no_argument, nullptr, 'd'},
-            {"slow-sessions", no_argument, nullptr, 's'},
-            {nullptr, 0, nullptr, 0}
-        };
-
-        while (true) {
-            const int opt = getopt_long(argc, argv, "ds", longopts, nullptr);
-            if (opt == -1) {
-                break;
-            }
-            if (opt == 'd') {
-                store_scheme_days = true;
-            } else if (opt == 's') {
-                slow_sessions = true;
-            } else {
-                print_usage(argv[0]);
-                return EXIT_FAILURE;
-            }
-        }
-        if (optind != argc - 2) {   
-            print_usage(argv[0]);
-            return EXIT_FAILURE;
-        }
         // TODO: allow arbitrary list of schemes
-        string scheme_group = argv[optind++];
-        if (scheme_group != "primary" && scheme_group != "vintages") {
+        string scheme_group = argv[1];
+        string scheme_days_action = argv[2];
+        string scheme_days_filename = argv[3];
+        string session_speed = argv[4];
+        if ((scheme_group != "primary" && scheme_group != "vintages") ||
+            (scheme_days_action != "--read-scheme-days" && scheme_days_action != "--write-scheme-days") || 
+            (session_speed != "--slow-sessions" && session_speed != "--all-sessions")) {
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
-        string scheme_days_filename = argv[optind];
+        
+        bool store_scheme_days = scheme_days_action == "--write-scheme-days";
+        bool slow_sessions = session_speed == "--slow-sessions";
         confint_main(store_scheme_days, scheme_group, scheme_days_filename, slow_sessions); 
         
     } catch (const exception & e) {
