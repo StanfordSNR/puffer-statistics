@@ -357,8 +357,7 @@ struct VideoSent {
     bool bad = false;
 
     bool complete() const {
-        // ASK: size is optional?
-        return ssim_index and delivery_rate and expt_id and init_id and user_id;
+        return ssim_index and delivery_rate and expt_id and init_id and user_id and size;
     }
 
     bool operator==(const VideoSent & other) const {
@@ -470,7 +469,7 @@ using event_table = map<uint64_t, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
 using video_sent_table = map<uint64_t, VideoSent>;
 
-#define MAX_SSIM 0.99999    // max acceptable raw SSIM (exclusive) 
+#define MAX_SSIM 0.99999    // max acceptable raw SSIM (inclusive) 
 // ignore SSIM ~ 1
 optional<double> raw_ssim_to_db(const double raw_ssim) {
     if (raw_ssim > MAX_SSIM) return nullopt; 
@@ -874,7 +873,7 @@ class Parser {
                 /* find matching videosent stream */
                 const auto [normal_ssim_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation] = video_summarize(key);
                 const double mean_ssim = ssim_sum == -1 ? -1 : ssim_sum / normal_ssim_chunks;
-                const size_t high_ssim_chunks = total_chunks - normal_ssim_chunks;
+                const size_t high_ssim_chunks = ssim_sum == -1 ? -1 : total_chunks - normal_ssim_chunks;
 
                 if (mean_delivery_rate < 0 ) {
                     missing_video_stats++;
@@ -898,8 +897,8 @@ class Parser {
                     << " startup_delay=" << summary.cum_rebuf_at_startup
                     << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
                     << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
-                    << " total_chunks=" << total_chunks
-                    << " high_ssim_chunks=" << high_ssim_chunks << "\n";
+                    << " total_chunks=" << total_chunks == -1 ? -1 : total_chunks
+                    << " high_ssim_chunks=" << high_ssim_chunks == -1 ? -1 : high_ssim_chunks << "\n";
 
                 total_extent += summary.time_extent;
 
