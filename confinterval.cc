@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <getopt.h>
 #include <cassert>
+#include <dateutil.hh>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -213,248 +214,71 @@ class Statistics {
     // list of watch times from which to sample
     vector<double> all_watch_times{};
 
-    using day_range = pair<uint64_t, uint64_t>;
+    using Day = uint64_t;
 
-    /* For each scheme, records day range(s) the scheme ran
-     * If a range has only one day in it, start and end of range are equal.
-     * For each scheme, the ranges are discontiguous, nonoverlapping, and sorted.
-     * e.g. if MPC ran Jan 1-June 1 and Oct 12, record
-     * MPC => { [Jan 1, June 1], [Oct 12, Oct 12] } */
-    map<string, vector<day_range>> scheme_days{};
-    /* Whether to write scheme days to file */
-    bool store_scheme_days;
-    /* File storing scheme_days */
-    string scheme_days_filename;
-    /* Days to be analyzed (i.e. intersection of all days the requested
-     * schemes were run, according to scheme_days) */
-    vector<day_range> acceptable_days{};
+    /* Days to be analyzed (read from input file) */
+    set<Day> acceptable_days{};
 
     // real (non-simulated) stats 
     map<string, SchemeStats> scheme_stats{};
 
-    // analyze slow sessions only
-    bool slow_sessions;
-
-    public: 
-     Statistics (bool store_scheme_days, const string & scheme_group,
-                 const string & scheme_days_filename, bool slow_sessions): 
-                 store_scheme_days(store_scheme_days),
-                 scheme_days_filename(scheme_days_filename),
-                 slow_sessions(slow_sessions) {
-        if (not store_scheme_days) {
-            /* Read scheme days map from file, and find list of intersecting
-             * days to be analyzed */
-            read_scheme_days();
-            vector<string> requested_schemes;
-            if (scheme_group == "primary") {
-                 requested_schemes = 
-                    {"puffer_ttp_cl/bbr", "mpc/bbr", 
-                     "robust_mpc/bbr", "pensieve/bbr", "linear_bba/bbr"};
-            } else if (scheme_group == "vintages") {
-                requested_schemes = 
-                    {"puffer_ttp_cl/bbr", "puffer_ttp_20190202/bbr", 
-                     "puffer_ttp_20190302/bbr", "puffer_ttp_20190402/bbr", "puffer_ttp_20190502/bbr"};
-            }
-            acceptable_days = scheme_days_intx(requested_schemes); 
-            // Populate scheme_stats, so parse() can determine if a scheme was requested
-            for (const string & scheme : requested_schemes) {
-                scheme_stats[scheme] = SchemeStats{};
-            }
+    public:     // TODO: check private/public (here and schemedays)
+     Statistics (const string & intersection_filename) {
+        vector<string> desired_schemes;
+        /* Read file containing desired schemes, and list of days they intersect */
+        read_intersection_file(intersection_filename, desired_schemes);
+        // Initialize scheme_stats, so parse() knows the desired schemes
+        for (const string & scheme : desired_schemes) {
+            scheme_stats[scheme] = SchemeStats{};
         }
     }
-
-    /* Find intx of two date ranges, if any */
-    optional<day_range> range_range_intx(day_range a, day_range b) {
-        const uint64_t max_low = max(get<0>(a), get<0>(b));
-        const uint64_t min_high = min(get<1>(a), get<1>(b));
-        if (max_low > min_high) return {};
-        return pair{max_low, min_high};
-    }
-
-    /* Find intx of two lists of ranges, if any */
-    const vector<day_range> rangelist_rangelist_intx(const vector<day_range> a, const vector<day_range> b) {
-        vector<day_range> total_intx;
-        // Total intx is sum of each range-range intx
-        for (const day_range & a_range : a) { 
-            for (const day_range & b_range : b) {
-                optional<day_range> _range_range_intx = range_range_intx(a_range, b_range);
-                if (_range_range_intx) {
-                    total_intx.emplace_back(_range_range_intx.value());
-                }
-            }
+        
+     void read_intersection_file(const string & intersection_filename, vector<string> & desired_schemes) {
+        ifstream intersection_file;
+        intersection_file.open(intersection_filename);
+        if (not intersection_file.is_open()) {
+            throw runtime_error( "can't open " + intersection_filename);
         }
-        return total_intx;
-    }
-    /* Find intx of one range with one scheme's ranges, if any */
-    const vector<day_range> range_scheme_intx(day_range range, const string & scheme) {
-        // use rangelist-rangelist intx with singleton list
-        return rangelist_rangelist_intx(vector<day_range>{range}, scheme_days[scheme]); 
-    }
-
-    /* Finds intx of given range across *all* given schemes */
-    const vector<day_range> range_allschemes_intx(day_range range, const vector<string> & schemes) {
-        vector<day_range> running_intx{range};
-        // For each other scheme, intx with running range-scheme intx
-        for (const string & scheme : schemes) {   
-            const vector<day_range> & _range_scheme_intx = range_scheme_intx(range, scheme); 
-            running_intx = rangelist_rangelist_intx(_range_scheme_intx, running_intx);
+        string line_storage, scheme;
+        // read all schemes
+        if (!getline(intersection_file, line_storage)) {
+            throw runtime_error( "error reading schemes from " + intersection_filename);
         }
-        return running_intx;
-    }
-
-    /* Given a list of schemes, find the days where all schemes in the list were run, according to scheme_days.
-     * Definitely not optimized (e.g. doesn't take much advantage of scheme_days being sorted), 
-     * but we expect only a few ranges per scheme. */
-    const vector<day_range> scheme_days_intx(const vector<string> schemes) {
-        // TODO: this is called from Statistics constructor, so maybe throwing is not the best...
-        if (scheme_days.empty()) {
-            throw runtime_error("Scheme days must be read from file before calculating list of days to analyze");
+        istringstream schemes_line(line_storage);
+        while (schemes_line >> scheme) {    
+            desired_schemes.emplace_back(scheme);
         }
-        vector<day_range> total_intx;
-        // For each range in the first scheme, add its intx with all the other schemes to total_intx
-        const vector<string> other_schemes = vector<string>(schemes.begin() + 1, schemes.end());
-        for (const day_range & range : scheme_days[schemes.front()]) {
-            const vector<day_range> & _range_allschemes_intx = range_allschemes_intx(range, other_schemes);
-            total_intx.insert(total_intx.end(), make_move_iterator(_range_allschemes_intx.begin()),
-                                                make_move_iterator(_range_allschemes_intx.end()));
-        }
-        /* TODO: trace what happens if empty -- maybe just empty graph?
-        if (total_intx.empty()) {
-            throw runtime_error("requested schemes were not run on any intersecting days");
-        }
-        */
-        return total_intx;
-    }
-
-    void test_scheme_days_intx() {
-        if (not scheme_days.empty()) {
-            cerr << "scheme_days is populated; aborting test" << endl;
-            return;
-        }
-        bool passed;
-        scheme_days["A"] = {{1,4}, {6,7}};
-        scheme_days["B"] = {{0,1}, {5,8}};
-        passed = scheme_days_intx({"A", "B"}) == vector<day_range>{{1,1}, {6,7}};
-        assert(passed);
-        passed = scheme_days_intx({"A"}) == vector<day_range>{{1,4}, {6,7}};
-        assert(passed);
-
-        scheme_days.clear();
-        scheme_days["A"] = {{0,2}, {5,8}};
-        scheme_days["B"] = {{2,6}, {8,10}};
-        scheme_days["C"] = {{1,3}, {6,7}};
-        passed = scheme_days_intx({"A", "B", "C"}) == vector<day_range>{{2,2}, {6,6}};
-        assert(passed);
-        scheme_days.clear();
-    }
-
-    /* Given the base timestamp and scheme of a stream, add 
-     * corresponding day to the list of days each scheme was run.
-     * Assumes input to confinterval is sorted by day, 
-     * so we only ever add to the end of the list
-     * (OK if not sorted within day, although analyze does that anyway) */
-    void record_scheme_days(uint64_t ts, const string & scheme) {
-        const unsigned sec_per_day = 60 * 60 * 24;
-        // ts_day and max_day are rounded down to nearest day
-        const uint64_t ts_day = ts / sec_per_day * sec_per_day;
-        const optional<uint64_t> max_day = scheme_days[scheme].empty() ? nullopt 
-                                           : make_optional(get<1>(scheme_days[scheme].back()));   
-        /* TODO: remove
-        cout << "recording day " << ts_day << " for scheme " << scheme <<
-            "; max day: " << max_day.value_or(-1) << endl;   
-        */
-        if (max_day and ts_day < max_day.value()) {
-            throw runtime_error("confinterval received out-of-order day");
-        }
-
-        if (not max_day or ts_day - max_day.value() > sec_per_day) { 
-           // new day creates hole => add new range 
-           scheme_days[scheme].push_back({ts_day, ts_day});   // no end date yet
-        } else if (ts_day - max_day.value() == sec_per_day) {
-           // new day is contiguous => extend existing range by a day
-           get<1>(scheme_days[scheme].back()) += sec_per_day; 
-        }
-        // if ts_day == max_day, already recorded this day
-    }
-    
-    /* Read scheme days from filename into scheme_days map for later
-     * lookup of timestamps to be analyzed */
-    void read_scheme_days() {
-        ifstream scheme_days_file{ scheme_days_filename };
-        if (not scheme_days_file.is_open()) {
-            throw runtime_error( "can't open " + scheme_days_filename );
-        }
-
-        string line_storage;
-        string scheme;
-        char scratch;
-        uint64_t range_start, range_end;
-
-        while (getline(scheme_days_file, line_storage)) {
-            if (line_storage.empty()) continue;
-            istringstream line(line_storage);
-            if (!(line >> skipws >> scheme)) {
-                throw runtime_error("error reading scheme from " + scheme_days_filename); 
-            }
-            while (not line.eof()) {    // read all ranges
-                if (!(line >> range_start) || !(line >> scratch) || !(line >> range_end)) {
-                    throw runtime_error("error reading dates from " + scheme_days_filename); 
-                }
-                scheme_days[scheme].emplace_back(pair{range_start, range_end});
-            }
+        // read all days
+        if (!getline(intersection_file, line_storage)) {
+            throw runtime_error( "error reading dates from " + intersection_filename);
         } 
-        if (scheme_days_file.bad()) {
-            throw runtime_error("error reading " + scheme_days_filename);
+        Day day;
+        istringstream days_line(line_storage);
+        while (days_line >> day) {  
+            acceptable_days.emplace(day);
         }
-        // TODO: remove
-        cout << "scheme days read from file: " << endl;
-        for (const auto & [scheme, ranges] : scheme_days) {
-            cout << "\n" << scheme;
-            for (const auto & [range_start, range_end] : ranges) {
-                cout << range_start << ":" << range_end << " "; 
-            }
+        intersection_file.close();
+        if (intersection_file.bad()) {
+            throw runtime_error("error reading " + intersection_filename);
         }
-    }
+        cerr << "acceptable days: \n";  // TODO: remove
+        print_intervals(acceptable_days);
+     }
 
-    /* Write map of scheme days to file. */
-    void write_scheme_days() {
-        ofstream scheme_days_file;
-        scheme_days_file.open(scheme_days_filename);
-        if (not scheme_days_file.is_open()) {
-            throw runtime_error( "can't open " + scheme_days_filename);
-        }
-        // file line format
-        // Puffer 1565193009:1567206883 1567206884:1567206885 ...
-        for (const auto & [scheme, ranges] : scheme_days) {
-            scheme_days_file << scheme;
-            for (const auto & range : ranges) {
-                scheme_days_file << " " << get<0>(range) << ":" << get<1>(range);
-            }
-            scheme_days_file << "\n";
-        }
-    }
-
-    /* Indicates whether ts is within the range of acceptable days, calculated as
-     * the intersection of the days that all requested schemes were run. */
+    /* Indicates whether ts is one of the acceptable days read
+     * from the input file */
     bool ts_is_acceptable(uint64_t ts) {
-        bool acceptable = false;
-        // acceptable_days is discontiguous, nonoverlapping, and sorted
-        for (const auto & [range_start, range_end] : acceptable_days) {
-            if (ts >= range_start && ts <= range_end) {
-                acceptable = true;
-                break;
-            }
-            // if ts is less than current range's end, will also be less than next range's start
-            if (ts < range_end) break;  
-        }
-        return acceptable;
+        const unsigned sec_per_day = 60 * 60 * 24;
+        // acceptable times are rounded down to nearest day
+        Day day = ts / sec_per_day * sec_per_day;
+        return (acceptable_days.count(day));
     }
     
     /* Populate SchemeStats with per-scheme watch/stall/ssim, 
      * ignoring stream if stream is bad/outside study period/short watch time.
      * Record all watch times independent of scheme. 
      * Record days each scheme was run, if desired. */
-    void parse_stdin() {
+    void parse_stdin(bool slow_sessions) {
         ios::sync_with_stdio(false);
         string line_storage;
 
@@ -484,29 +308,29 @@ class Statistics {
             }
 
             split_on_char(line, ' ', fields);
-            if (fields.size() != 18) {
+            if (fields.size() != 20) {
                 throw runtime_error("Bad line: " + line_storage);
             }
 
             const auto & [ts_str, goodbad, fulltrunc, badreason, scheme, ip, os, channelchange, init_id,
                   extent, usedpct, mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation_db,
                   startup_delay, time_after_startup,
-                  time_stalled]
+                  time_stalled, total_stream_chunks, high_ssim_stream_chunks]
                       = tie(fields[0], fields[1], fields[2], fields[3],
                               fields[4], fields[5], fields[6], fields[7],
                               fields[8], fields[9], fields[10], fields[11],
-                              fields[12], fields[13], fields[14], fields[15], fields[16], fields[17]);
+                              fields[12], fields[13], fields[14], fields[15], fields[16], fields[17],
+                              fields[18], fields[19]);
 
             const uint64_t ts = to_uint64(ts_str);
-            if (store_scheme_days) {
-                record_scheme_days(ts, string(scheme));
-                /* If writing scheme days to file, don't calculate conf int 
-                 * since we don't have a timestamp range */
-                continue;   
-            }
+
             if (not ts_is_acceptable(ts)) {
-                cout << "skipping out-of-range ts: " << ts << endl; // TODO: remove
+                cerr << "skipping out-of-range ts: ";
+                print_intervals(set<uint64_t>{ts});  // TODO: remove
                 continue;
+            } else {
+                cerr << "in-range ts: ";
+                print_intervals(set<uint64_t>{ts});  // TODO: remove
             }
 
             if (slow_sessions) {
@@ -576,10 +400,6 @@ class Statistics {
                 if ( ssim_variation_db_val > 0 and ssim_variation_db_val <= 10000 ) { the_scheme->add_ssim_variation_sample(ssim_variation_db_val); }
             }
         }   // end while
-
-        if (store_scheme_days) {
-            write_scheme_days();
-        }
     }
 
     /* Simulate watch and stall time: 
@@ -708,8 +528,8 @@ class Statistics {
         // initialize with real stats, from which to sample
         constexpr unsigned int iteration_count = 10000;
         vector<Realizations> realizations;
-        for (const auto & [requested_scheme, requested_scheme_stats] : scheme_stats) {
-            realizations.emplace_back(Realizations{requested_scheme, requested_scheme_stats});
+        for (const auto & [desired_scheme, desired_scheme_stats] : scheme_stats) {
+            realizations.emplace_back(Realizations{desired_scheme, desired_scheme_stats});
         }
 
         /* For each scheme, take 10000 simulated stall ratios */
@@ -734,52 +554,61 @@ class Statistics {
     }
 };
 
-void confint_main(bool store_scheme_days, const string & scheme_group, 
-                  const string & scheme_days_filename, bool slow_sessions) {
-    Statistics stats { store_scheme_days, scheme_group, scheme_days_filename, slow_sessions };
-    stats.test_scheme_days_intx(); // TODO: remove
-    stats.parse_stdin();
-    // stats.do_point_estimate(); // TODO: put back!
+void confint_main(const string & intersection_filename, bool slow_sessions) {
+    Statistics stats {  intersection_filename };
+    stats.parse_stdin(slow_sessions);
+    stats.do_point_estimate(); 
 }
 
+// TODO: update file comment
 void print_usage(const string & program) {
-    cerr << "Usage: " << program << " <scheme_group> <scheme_days_action> <scheme_days_filename> <session_speed>\n" 
-            "scheme_group: Either primary or vintages (for now)\n"
-            "scheme_days_action: Either --read-scheme-days or --write-scheme-days.\n"
-            "Scheme_days is a list of days each scheme has run, used to determine the dates to analyze.\n"
-            "To read this list from an already populated file, select read.\n"
-            "To form this list from the input data and write to file for later use, select write.\n"
-            "(No confidence intervals will be calculated if write is selected, since scheme_days is needed to determine the dates to analyze).\n"
-            "scheme_days_filename: File from which to read or write scheme_days.\n"
-            "session_speed: --slow-sessions or --all-sessions\n";
+    cerr << "Usage: " << program << " --scheme-intersection <intersection_filename> --session-speed <session_speed>\n" 
+            "intersection_filename: Output of schemedays --intersect-schemes --intersect-outfile, "
+            "containing desired schemes and the days they intersect.\n"
+            "session_speed: slow or all\n";
 }
 
-int main(int argc, char *argv[]) { 
-    try {
-        if (argc <= 0) {
+int main(int argc, char *argv[]) {
+   try {
+        if (argc < 1) {
             abort();
         }
+        const option opts[] = {
+            {"scheme-intersection", required_argument, nullptr, 'i'},
+            {"session-speed", required_argument, nullptr, 's'},
+            {nullptr, 0, nullptr, 0}
+        };
+        string intersection_filename;
+        string session_speed;
 
-        if (argc != 5) { 
+        while (true) {
+            const int opt = getopt_long(argc, argv, "i:s:", opts, nullptr);
+            if (opt == -1) break;
+            switch (opt) {
+                case 'i': 
+                    intersection_filename = optarg;
+                    break;
+                case 's':
+                    session_speed = optarg;
+                    break;
+                default:
+                    print_usage(argv[0]);
+                    return EXIT_FAILURE;
+            }
+        }
+
+        if (optind != argc) {
+            print_usage(argv[0]);
+            return EXIT_FAILURE;
+        }
+        if (intersection_filename.empty() or (session_speed != "slow" and session_speed != "all")) {
+            cerr << "Error: Scheme days file and session speed (slow or all) are required\n";
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
 
-        // TODO: allow arbitrary list of schemes
-        string scheme_group = argv[1];
-        string scheme_days_action = argv[2];
-        string scheme_days_filename = argv[3];
-        string session_speed = argv[4];
-        if ((scheme_group != "primary" && scheme_group != "vintages") ||
-            (scheme_days_action != "--read-scheme-days" && scheme_days_action != "--write-scheme-days") || 
-            (session_speed != "--slow-sessions" && session_speed != "--all-sessions")) {
-            print_usage(argv[0]);
-            return EXIT_FAILURE;
-        }
-        
-        bool store_scheme_days = scheme_days_action == "--write-scheme-days";
-        bool slow_sessions = session_speed == "--slow-sessions";
-        confint_main(store_scheme_days, scheme_group, scheme_days_filename, slow_sessions); 
+        bool slow_sessions = session_speed == "slow";
+        confint_main(intersection_filename, slow_sessions); 
         
     } catch (const exception & e) {
         cerr << e.what() << "\n";
