@@ -31,7 +31,7 @@ using google::dense_hash_map;
  * From stdin, parses influxDB export, which contains one line per key/value datapoint 
  * collected at a given timestamp. Keys correspond to fields in Event, SysInfo, or VideoSent.
  * To stdout, outputs summary of each stream (one stream per line).
- * Takes experimental settings as argument.
+ * Takes experimental settings and date as arguments.
  */
 
 size_t memcheck() {
@@ -202,7 +202,10 @@ struct Event {
         bool operator!=(const EventType::Type other) const { return not operator==(other); }
     };
 
-    optional<uint32_t> init_id{};
+    /* After 11/27, all measurements are recorded with both first_init_id (identifies session) 
+     * and init_id (identifies stream). Before 11/27, only init_id is recorded. */
+    optional<uint32_t> first_init_id{}; // optional
+    optional<uint32_t> init_id{};       // mandatory
     optional<uint32_t> expt_id{};
     optional<uint32_t> user_id{};
     optional<EventType> type{};
@@ -211,7 +214,7 @@ struct Event {
 
     bool bad = false;
 
-    // Event is "complete" and "good" if all fields are set exactly once
+    // Event is "complete" and "good" if all mandatory fields are set exactly once
     bool complete() const {
         return init_id.has_value() and expt_id.has_value() and user_id.has_value()
             and type.has_value() and buffer.has_value() and cum_rebuf.has_value();
@@ -225,7 +228,7 @@ struct Event {
                 if (field.value() != value) {
                     if (not bad) {
                         bad = true;
-                        cerr << "error trying to set contradictory value: ";
+                        cerr << "error trying to set contradictory event value: ";
                         cerr << *this;   
                     }
                     //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
@@ -236,7 +239,9 @@ struct Event {
     /* Set field corresponding to key, if not yet set for this Event.
      * If field is already set with a different value, Event is "bad" */
     void insert_unique(const string_view key, const string_view value, string_table & usernames ) {
-        if (key == "init_id"sv) {
+        if (key == "first_init_id"sv) {
+            set_unique( first_init_id, influx_integer<uint32_t>( value ) );
+        } else if (key == "init_id"sv) {
             set_unique( init_id, influx_integer<uint32_t>( value ) );
         } else if (key == "expt_id"sv) {
             set_unique( expt_id, influx_integer<uint32_t>( value ) );
@@ -265,6 +270,7 @@ std::ostream& operator<< (std::ostream& out, const Event& s) {
     << ", type=" << (s.type.has_value() ? int(s.type.value()) : 'x')
     << ", buffer=" << s.buffer.value_or(-1.0)
     << ", cum_rebuf=" << s.cum_rebuf.value_or(-1.0)
+    << ", first_init_id=" << s.first_init_id.value_or(-1)
     << "\n";
 }
 
@@ -272,7 +278,8 @@ struct Sysinfo {
     optional<uint32_t> browser_id{};
     optional<uint32_t> expt_id{};
     optional<uint32_t> user_id{};
-    optional<uint32_t> init_id{};
+    optional<uint32_t> first_init_id{}; // optional
+    optional<uint32_t> init_id{};       // mandatory
     optional<uint32_t> os{};
     optional<uint32_t> ip{};
 
@@ -288,7 +295,8 @@ struct Sysinfo {
             and user_id == other.user_id
             and init_id == other.init_id
             and os == other.os
-            and ip == other.ip;
+            and ip == other.ip
+            and first_init_id == first_init_id;
     }
 
     bool operator!=(const Sysinfo & other) const { return not operator==(other); }
@@ -313,7 +321,9 @@ struct Sysinfo {
             string_table & usernames,
             string_table & browsers,
             string_table & ostable ) {
-        if (key == "init_id"sv) {
+        if (key == "first_init_id"sv) {
+            set_unique( first_init_id, influx_integer<uint32_t>( value ) );
+        } else if (key == "init_id"sv) {
             set_unique( init_id, influx_integer<uint32_t>( value ) );
         } else if (key == "expt_id"sv) {
             set_unique( expt_id, influx_integer<uint32_t>( value ) );
@@ -347,18 +357,18 @@ std::ostream& operator<< (std::ostream& out, const Sysinfo& s) {
     << ", browser_id=" << (s.browser_id.value_or(-1))
     << ", os=" << s.os.value_or(-1.0)
     << ", ip=" << s.ip.value_or(-1.0)
+    << ", first_init_id=" << s.first_init_id.value_or(-1)
     << "\n";
 }
 
 struct VideoSent {
     optional<float> ssim_index{};
-    optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, user_id{}, size{};
+    optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, first_init_id{}, user_id{}, size{};
 
     bool bad = false;
 
     bool complete() const {
-        // ASK: size is optional?
-        return ssim_index and delivery_rate and expt_id and init_id and user_id;
+        return ssim_index and delivery_rate and expt_id and init_id and user_id and size;
     }
 
     bool operator==(const VideoSent & other) const {
@@ -367,7 +377,8 @@ struct VideoSent {
             and expt_id == other.expt_id
             and init_id == other.init_id
             and user_id == other.user_id
-            and size == other.size;
+            and size == other.size
+            and first_init_id == first_init_id;
     }
 
     bool operator!=(const VideoSent & other) const { return not operator==(other); }
@@ -380,7 +391,7 @@ struct VideoSent {
                 if (field.value() != value) {
                     if (not bad) {
                         bad = true;
-                        cerr << "error trying to set contradictory sysinfo value: ";
+                        cerr << "error trying to set contradictory videosent value: ";
                         cerr << *this; 
                     }
                     //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
@@ -390,7 +401,9 @@ struct VideoSent {
     
     void insert_unique(const string_view key, const string_view value,
             string_table & usernames ) {
-        if (key == "init_id"sv) {
+        if (key == "first_init_id"sv) {
+            set_unique( first_init_id, influx_integer<uint32_t>( value ) );
+        } else if (key == "init_id"sv) {
             set_unique( init_id, influx_integer<uint32_t>( value ) );
         } else if (key == "expt_id"sv) {
             set_unique( expt_id, influx_integer<uint32_t>( value ) );
@@ -423,15 +436,16 @@ std::ostream& operator<< (std::ostream& out, const VideoSent& s) {
         << ", ssim_index=" << s.ssim_index.value_or(-1)
         << ", delivery_rate=" << s.delivery_rate.value_or(-1)
         << ", size=" << s.size.value_or(-1)
+        << ", first_init_id=" << s.first_init_id.value_or(-1)
         << "\n";
 }
 
 struct Channel {
-    constexpr static uint8_t COUNT = 6;
+    constexpr static uint8_t COUNT = 9;
 
-    enum class ID : uint8_t { cbs, nbc, abc, fox, univision, pbs };
+    enum class ID : uint8_t { cbs, nbc, abc, fox, univision, pbs, cw, ion, mnt };
 
-    constexpr static array<string_view, COUNT> names = { "cbs", "nbc", "abc", "fox", "univision", "pbs" };
+    constexpr static array<string_view, COUNT> names = { "cbs", "nbc", "abc", "fox", "univision", "pbs", "cw", "ion", "mnt" };
 
     ID id;
 
@@ -444,6 +458,9 @@ struct Channel {
         else if (sv == "fox"sv) { id = ID::fox; }
         else if (sv == "univision"sv) { id = ID::univision; }
         else if (sv == "pbs"sv) { id = ID::pbs; }
+        else if (sv == "cw"sv) { id = ID::cw; }
+        else if (sv == "ion"sv) { id = ID::ion; }
+        else if (sv == "mnt"sv) { id = ID::mnt; }
         else { throw runtime_error( "unknown channel: " + string(sv) ); }
     }
 
@@ -510,6 +527,11 @@ class Parser {
 
         vector<string> experiments{};
 
+        /* Timestamps to be analyzed (influx export includes corrupt data outside the requested range),
+         * nanosecond Unix format. */
+        pair<uint64_t, uint64_t> dates{};
+        size_t n_bad_ts = 0;
+
         void read_experimental_settings_dump(const string & filename) {
             ifstream experiment_dump{ filename };
             if (not experiment_dump.is_open()) {
@@ -543,12 +565,13 @@ class Parser {
                 if (name.empty()) {
                     name = doc["abr"].asString();
                 }
+                // populate experiments with expt_id => abr_name/cc or abr/cc
                 experiments.at(experiment_id) = name + "/" + doc["cc"].asString();
             }
         }
 
     public:
-        Parser(const string & experiment_dump_filename)
+        Parser(const string & experiment_dump_filename, uint64_t start_ts)
             : sessions(), sysinfos(), chunks()
         {
             sessions.set_empty_key({0,0,0,-1,-1});
@@ -560,13 +583,17 @@ class Parser {
             ostable.forward_map_vivify("unknown");
 
             read_experimental_settings_dump(experiment_dump_filename);
+            dates.first = start_ts;
+            dates.second = start_ts + 1000000000UL * 60 * 60 * 24;
         }
+
 
         /* Parse lines of influxDB export, for lines measuring client_buffer, client_sysinfo, or video_sent.
          * Each such line contains one field in an Event, SysInfo, or VideoSent (respectively)
          * corresponding to a certain server, channel (for Event/VideoSent only), and timestamp.
          * Store that field in the appropriate Event, SysInfo, or VideoSent (which may already
-         * be partially populated by other lines) in client_buffer, client_sysinfo, or video_sent. */
+         * be partially populated by other lines) in client_buffer, client_sysinfo, or video_sent. 
+         * Ignore data points out of the date range. */
         void parse_stdin() {
             ios::sync_with_stdio(false);
             string line_storage;
@@ -578,7 +605,7 @@ class Parser {
             while (cin.good()) {
                 if (line_no % 1000000 == 0) {
                     const size_t rss = memcheck() / 1024;
-                    cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n";
+                    cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n"; 
                 }
 
                 getline(cin, line_storage);
@@ -608,7 +635,12 @@ class Parser {
                 const auto [measurement_tag_set, field_set, timestamp_str] = tie(fields[0], fields[1], fields[2]);
                 // e.g. ["client_buffer,channel=abc,server_id=1", "cum_rebuf=2.183", "1546379215825000000"]
 
+                // skip out-of-range data points
                 const uint64_t timestamp{to_uint64(timestamp_str)};
+                if (timestamp < dates.first or timestamp > dates.second) {
+                    n_bad_ts++;
+                    continue;
+                }
 
                 split_on_char(measurement_tag_set, ',', measurement_tag_set_fields);
                 if (measurement_tag_set_fields.empty()) {
@@ -705,9 +737,11 @@ class Parser {
             }
         }
 
-        /* Map each SysInfo to a session (key is {init_id, expt_id, user_id}) 
+        /* Map each SysInfo to a stream or session (in the case of older data, when sysinfo was only supplied on load).
+         * Key is {init_id, expt_id, user_id}.
          * Ignore "bad" SysInfos (field was set multiple times), throw for "incomplete" SysInfos (field was never set)
-         * Store in sysinfos; SysInfo is only supplied on load, so there should only be one SysInfo per session */
+         * Store in sysinfos.
+         * Use init_id in the key, not first_init_id, since there may be multiple sysinfos per session. */
         void accumulate_sysinfos() {
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
                 const size_t rss = memcheck() / 1024;
@@ -716,12 +750,11 @@ class Parser {
                     if (sysinfo.bad) {
                         bad_count++;
                         cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
-
                         continue;
                     }
                     if (not sysinfo.complete()) {
                         throw runtime_error("incomplete sysinfo with timestamp " + to_string(ts));
-                    }
+                    } 
 
                     const sysinfo_key key{*sysinfo.init_id, *sysinfo.user_id, *sysinfo.expt_id};
                     const auto it = sysinfos.find(key);
@@ -797,7 +830,7 @@ class Parser {
             }
             cerr << "sysinfos:" << endl;
             for ( const auto & [key, sysinfo] : sysinfos ) {
-                cerr << "session key: "; 
+                cerr << "sysinfo key: "; 
                 print(key);
                 cerr << sysinfo; 
             }
@@ -842,37 +875,55 @@ class Parser {
             unsigned int missing_sysinfo = 0;
             unsigned int missing_video_stats = 0;
 
-            size_t overall_chunks = 0;
-            size_t overall_high_ssim_chunks = 0;
+            size_t overall_chunks = 0, overall_high_ssim_chunks = 0, overall_ssim_1_chunks = 0;
 
             for ( auto & [key, events] : sessions ) {
-                /* find matching Sysinfo */
-                Sysinfo sysinfo{0,0,0,0,0,0};
+                /* Find Sysinfo corresponding to this stream. */
+                /* Client increments init_id with each channel change.
+                 * Before ~11/27/19: must decrement init_id until reaching the initial init_id
+                 * to find the corresponding Sysinfo. Also, sysinfo was only supplied on load.
+                 * After 11/27: Each data point is recorded with first_init_id and init_id.
+                 * Also, sysinfo is supplied on both load and channel change. */
+                auto sysinfo_it = sysinfos.end();
                 int channel_changes = -1;
-                for ( unsigned int decrement = 0; decrement < 1024; decrement++ ) {
-                    /* Client supplies Sysinfo and init_id on load, then increments init_id
-                     * with each channel change. So, decrement init_id until reaching the initial init_id
-                     * to find the corresponding Sysinfo */
-                    const auto sysinfo_it = sysinfos.find({get<0>(key) - decrement,
+                // use first event to check if stream uses first_init_id
+                optional<uint32_t> first_init_id = events.front().second->first_init_id;
+                if (first_init_id) {
+                    /* We introduced first_init_id at the same time we started sending client_sysinfo 
+                     * for every stream, so if a stream has the first_init_id field in its datapoints, 
+                     * then that stream should have its own sysinfo
+                     * (so no need to decrement to find the sysinfo) */
+                    sysinfo_it = sysinfos.find({get<0>(key),
                             get<1>(key),
                             get<2>(key)});
-                    if (sysinfo_it == sysinfos.end()) {
-                        // loop again
-                    } else {
-                        sysinfo = sysinfo_it->second;
-                        channel_changes = decrement;
-                        break;
+                    channel_changes = get<0>(key) - first_init_id.value();
+                } else {
+                    for ( unsigned int decrement = 0; decrement < 1024; decrement++ ) {
+                        sysinfo_it = sysinfos.find({get<0>(key) - decrement,
+                                get<1>(key),
+                                get<2>(key)});
+                        if (sysinfo_it == sysinfos.end()) {
+                            // loop again
+                        } else {
+                            channel_changes = decrement;
+                            break;
+                        }
                     }
                 }
 
-                if (channel_changes == -1) {
+                Sysinfo sysinfo{};
+                sysinfo.os = 0;
+                sysinfo.ip = 0;
+                if (sysinfo_it == sysinfos.end()) {
                     missing_sysinfo++;
+                } else {
+                    sysinfo = sysinfo_it->second;
                 }
 
                 const EventSummary summary = summarize(key, events);
 
                 /* find matching videosent stream */
-                const auto [normal_ssim_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation] = video_summarize(key);
+                const auto [normal_ssim_chunks, ssim_1_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation] = video_summarize(key);
                 const double mean_ssim = ssim_sum == -1 ? -1 : ssim_sum / normal_ssim_chunks;
                 const size_t high_ssim_chunks = total_chunks - normal_ssim_chunks;
 
@@ -881,6 +932,7 @@ class Parser {
                 } else {
                     overall_chunks += total_chunks;
                     overall_high_ssim_chunks += high_ssim_chunks;
+                    overall_ssim_1_chunks += ssim_1_chunks;
                 }
 
                 cout << fixed;
@@ -898,8 +950,7 @@ class Parser {
                     << " startup_delay=" << summary.cum_rebuf_at_startup
                     << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
                     << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
-                    << " total_chunks=" << total_chunks
-                    << " high_ssim_chunks=" << high_ssim_chunks << "\n";
+                    << "\n";
 
                 total_extent += summary.time_extent;
 
@@ -918,16 +969,17 @@ class Parser {
 
             // mark summary lines with # so confinterval will ignore them
             cout << "#num_sessions=" << sessions.size() << " good=" << good_sessions << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " missing_video_stats=" << missing_video_stats << " had_stall=" << had_stall 
-                 << " overall_chunks=" << overall_chunks << " overall_high_ssim_chunks=" << overall_high_ssim_chunks << "\n";
+                 << " overall_chunks=" << overall_chunks << " overall_high_ssim_chunks=" << overall_high_ssim_chunks 
+                 << " overall_ssim_1_chunks=" << overall_ssim_1_chunks << " out_of_range_ts=" << n_bad_ts << "\n";
             cout << "#total_extent=" << total_extent / 3600.0 << " total_time_after_startup=" << total_time_after_startup / 3600.0 << " total_stall_time=" << total_stall_time / 3600.0 << "\n";
         }
 
         /* Summarize a list of Videosents, ignoring SSIM ~ 1 */
-        // normal_ssim_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation]
-        tuple<size_t, size_t, double, double, double, double> video_summarize(const session_key & key) const {
+        // normal_ssim_chunks, ssim_1_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation]
+        tuple<size_t, size_t, size_t, double, double, double, double> video_summarize(const session_key & key) const {
             const auto videosent_it = chunks.find(key);
             if (videosent_it == chunks.end()) {
-                return { -1, -1, -1, -1, -1, -1 };
+                return { -1, -1, -1, -1, -1, -1, -1 };
             }
 
             const vector<pair<uint64_t, const VideoSent *>> & chunk_stream = videosent_it->second;
@@ -941,11 +993,16 @@ class Parser {
             size_t num_ssim_samples = chunk_stream.size();
             /* variation is calculated between each consecutive pair of chunks */
             size_t num_ssim_var_samples = chunk_stream.size() - 1;  
+            size_t num_ssim_1_chunks = 0;
 
             for ( const auto [ts, videosent] : chunk_stream ) {
-                ssim_cur_db = raw_ssim_to_db(videosent->ssim_index.value());
+                float raw_ssim = videosent->ssim_index.value(); // would've thrown by this point if not set
+                if (raw_ssim == 1.0) {
+                    num_ssim_1_chunks++; 
+                }
+                ssim_cur_db = raw_ssim_to_db(raw_ssim);
                 if (ssim_cur_db.has_value()) {
-                    ssim_sum += videosent->ssim_index.value();
+                    ssim_sum += raw_ssim;
                 } else {
                     num_ssim_samples--; // for ssim_mean, ignore chunk with SSIM == 1
                 }
@@ -969,7 +1026,7 @@ class Parser {
                 average_absolute_ssim_variation = ssim_absolute_variation_sum / num_ssim_var_samples;
             }
 
-            return { num_ssim_samples, chunk_stream.size(), ssim_sum, delivery_rate_sum / chunk_stream.size(), average_bitrate, average_absolute_ssim_variation };
+            return { num_ssim_samples, num_ssim_1_chunks, chunk_stream.size(), ssim_sum, delivery_rate_sum / chunk_stream.size(), average_bitrate, average_absolute_ssim_variation };
         }
 
         /* Summarize a list of events corresponding to a stream. */
@@ -1098,8 +1155,8 @@ class Parser {
         }
 };
 
-void analyze_main(const string & experiment_dump_filename) {
-    Parser parser{ experiment_dump_filename };
+void analyze_main(const string & experiment_dump_filename, uint64_t start_ts) {
+    Parser parser{ experiment_dump_filename, start_ts };
 
     parser.parse_stdin();
     parser.accumulate_sessions();
@@ -1108,18 +1165,39 @@ void analyze_main(const string & experiment_dump_filename) {
     parser.analyze_sessions();
 }
 
+/* Parse date to nanosecond Unix timestamp at 11AM UTC, e.g. 2019-11-28T11_2019-11-29T11 => 1574938800000000000 */
+optional<uint64_t> parse_date(const string & date) {
+    const auto T_pos = date.find('T');
+    const string & start_day = date.substr(0, T_pos);
+
+    struct tm day_fields{};
+    // format 2019-07-01 11:00:00
+    if (not strptime((start_day + " 11:00:00").c_str(), "%Y-%m-%d %H:%M:%S", &day_fields)) {
+        return nullopt;
+    }
+    uint64_t start_ts = mktime(&day_fields) * 1000000000;
+    return start_ts;
+}
+
+/* Must take date as argument, to filter out extra data from influx export */
 int main(int argc, char *argv[]) {
     try {
         if (argc <= 0) {
             abort();
         }
 
-        if (argc != 2) {
-            cerr << "Usage: " << argv[0] << " expt_dump [from postgres]\n";
+        if (argc != 3) {
+            cerr << "Usage: " << argv[0] << " expt_dump [from postgres] date [e.g. 2019-07-01T11_2019-07-02T11]\n";
             return EXIT_FAILURE;
         }
 
-        analyze_main(argv[1]);
+        optional<uint64_t> start_ts = parse_date(argv[2]); 
+        if (not start_ts) {
+            cerr << "Date argument could not be parsed; format as 2019-07-01T11_2019-07-02T11\n";
+            return EXIT_FAILURE;
+        }
+        
+        analyze_main(argv[1], start_ts.value());
     } catch (const exception & e) {
         cerr << e.what() << "\n";
         return EXIT_FAILURE;
