@@ -26,6 +26,8 @@ using namespace std::literals;
  * From stdin, parses output of analyze, which contains one line per stream summary.
  * To stdout, outputs each scheme's mean stall ratio, SSIM, and SSIM variance,
  * along with confidence intervals. 
+ * Takes as argument the file containing desired schemes and the days they intersect 
+ * (from schemedays --intersect-outfile)
  * Stall ratio is calculated over simulated samples;
  * SSIM/SSIMvar is calculated over real samples.
  */
@@ -222,7 +224,7 @@ class Statistics {
     // real (non-simulated) stats 
     map<string, SchemeStats> scheme_stats{};
 
-    public:     // TODO: check private/public (here and schemedays)
+    public:     // TODO: some of this could be private (same in schemedays) 
      Statistics (const string & intersection_filename) {
         vector<string> desired_schemes;
         /* Read file containing desired schemes, and list of days they intersect */
@@ -261,7 +263,11 @@ class Statistics {
         if (intersection_file.bad()) {
             throw runtime_error("error reading " + intersection_filename);
         }
-        cerr << "acceptable days: \n";  // TODO: remove
+        cerr << "Confint schemes:\n";
+        for (const auto & desired_scheme : desired_schemes) {
+            cerr << desired_scheme << " ";
+        }
+        cerr << "\nConfint days:\n";  // TODO: remove
         print_intervals(acceptable_days);
      }
 
@@ -271,7 +277,7 @@ class Statistics {
         const unsigned sec_per_day = 60 * 60 * 24;
         // acceptable times are rounded down to nearest day
         Day day = ts / sec_per_day * sec_per_day;
-        return (acceptable_days.count(day));
+        return acceptable_days.count(day);
     }
     
     /* Populate SchemeStats with per-scheme watch/stall/ssim, 
@@ -308,30 +314,24 @@ class Statistics {
             }
 
             split_on_char(line, ' ', fields);
-            if (fields.size() != 20) {
+            if (fields.size() != 18) {
                 throw runtime_error("Bad line: " + line_storage);
             }
 
             const auto & [ts_str, goodbad, fulltrunc, badreason, scheme, ip, os, channelchange, init_id,
                   extent, usedpct, mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation_db,
                   startup_delay, time_after_startup,
-                  time_stalled, total_stream_chunks, high_ssim_stream_chunks]
+                  time_stalled]
                       = tie(fields[0], fields[1], fields[2], fields[3],
                               fields[4], fields[5], fields[6], fields[7],
                               fields[8], fields[9], fields[10], fields[11],
-                              fields[12], fields[13], fields[14], fields[15], fields[16], fields[17],
-                              fields[18], fields[19]);
+                              fields[12], fields[13], fields[14], fields[15], fields[16], fields[17]);
 
             const uint64_t ts = to_uint64(ts_str);
 
             if (not ts_is_acceptable(ts)) {
-                cerr << "skipping out-of-range ts: ";
-                print_intervals(set<uint64_t>{ts});  // TODO: remove
                 continue;
-            } else {
-                cerr << "in-range ts: ";
-                print_intervals(set<uint64_t>{ts});  // TODO: remove
-            }
+            } 
 
             if (slow_sessions) {
                 split_on_char(mean_delivery_rate, '=', scratch);
@@ -560,7 +560,6 @@ void confint_main(const string & intersection_filename, bool slow_sessions) {
     stats.do_point_estimate(); 
 }
 
-// TODO: update file comment
 void print_usage(const string & program) {
     cerr << "Usage: " << program << " --scheme-intersection <intersection_filename> --session-speed <session_speed>\n" 
             "intersection_filename: Output of schemedays --intersect-schemes --intersect-outfile, "
