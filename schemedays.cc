@@ -28,7 +28,9 @@ using namespace std::literals;
  * To output file, writes a list of days each scheme has run, used to determine the dates to analyze.\n"
  */
 
-using Day = uint64_t;   // timestamps are rounded down to midnight
+/* Whenever a timestamp is used to represent a day, round down to Influx backup hour,
+ * in seconds (analyze records ts as seconds) */
+using Day_sec = uint64_t;
 
 /* Program either writes a list of schemedays to file, or reads the list from file
  * and uses it to find the intersection of multiple schemes' days. */
@@ -83,7 +85,7 @@ class SchemeDays {
 
     /* For each scheme, records all unique days the scheme ran, 
      * according to input data */
-    map<string, set<Day>> scheme_days{};
+    map<string, set<Day_sec>> scheme_days{};
 
     /* File storing scheme_days */
     string scheme_days_filename;
@@ -151,10 +153,8 @@ class SchemeDays {
      * corresponding day to the set of days the scheme was run.
      * Does not assume input data is sorted in any way. */ 
     void record_scheme_day(uint64_t ts, const string & scheme) {
-        const unsigned sec_per_day = 60 * 60 * 24;
-        // ts_day is rounded down to nearest day
-        Day scheme_day = ts / sec_per_day * sec_per_day;
-        scheme_days[scheme].emplace(scheme_day);
+        Day_sec day = ts2Day_sec(ts);
+        scheme_days[scheme].emplace(day);
     }
 
     /* Read scheme days from filename into scheme_days map */
@@ -166,7 +166,7 @@ class SchemeDays {
 
         string line_storage;
         string scheme;
-        Day day;
+        Day_sec day;
 
         while (getline(scheme_days_file, line_storage)) {
             istringstream line(line_storage);
@@ -193,7 +193,7 @@ class SchemeDays {
         // mpc/bbr 1565193009 1567206883 1567206884 1567206885 ...
         for (const auto & [scheme, days] : scheme_days) {
             scheme_days_file << scheme;
-            for (const Day & day : days) {
+            for (const Day_sec & day : days) {
                 scheme_days_file << " " << day;
             }
             scheme_days_file << "\n";
@@ -236,8 +236,8 @@ class SchemeDays {
             }
         }
         // find intersection
-        set<Day> running_intx {scheme_days[desired_schemes.front()]};
-        set<Day> cur_intx {};
+        set<Day_sec> running_intx {scheme_days[desired_schemes.front()]};
+        set<Day_sec> cur_intx {};
         for (auto it = desired_schemes.begin() + 1; it != desired_schemes.end(); it++) {
             if (scheme_days[*it].empty()) {
                 throw runtime_error("requested scheme " + *it + " was not run on any days");
@@ -314,7 +314,7 @@ int main(int argc, char *argv[]) {
             {nullptr, 0, nullptr, 0}
         };
         Action action = NONE;
-        string desired_schemes; // TODO: primary or vintage for now; allow comma-sep list
+        string desired_schemes; 
         string intersection_filename;
 
         while (true) {
@@ -322,13 +322,28 @@ int main(int argc, char *argv[]) {
             if (opt == -1) break;
             switch (opt) {
                 case 'b':
+                    if (action == INTERSECTION) {
+                        cerr << "Error: Only one action can be selected\n";
+                        print_usage(argv[0]);
+                        return EXIT_FAILURE;
+                    }
                     action = BUILD_LIST;
                     break;
                 case 's':
+                    if (action == BUILD_LIST) {
+                        cerr << "Error: Only one action can be selected\n";
+                        print_usage(argv[0]);
+                        return EXIT_FAILURE;
+                    }
                     action = INTERSECTION;
                     desired_schemes = optarg;
                     break;
                 case 'o':
+                    if (action == BUILD_LIST) {
+                        cerr << "Error: Only one action can be selected\n";
+                        print_usage(argv[0]);
+                        return EXIT_FAILURE;
+                    }
                     action = INTERSECTION;
                     intersection_filename = optarg;
                     break;
@@ -339,12 +354,12 @@ int main(int argc, char *argv[]) {
         }
 
         if (optind != argc - 1 or action == NONE) {
-            cerr << "Error: filename and action are required\n";
+            cerr << "Error: Filename and action are required\n";
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
         if (action == INTERSECTION and (desired_schemes.empty() or intersection_filename.empty())) {
-            cerr << "Error: intersection requires schemes list and outfile\n";
+            cerr << "Error: Intersection requires schemes list and outfile\n";
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }

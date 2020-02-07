@@ -21,6 +21,7 @@
 
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <dateutil.hh>
 
 using namespace std;
 using namespace std::literals;
@@ -486,6 +487,11 @@ Channel get_channel(const vector<string_view> & fields) {
 using event_table = map<uint64_t, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
 using video_sent_table = map<uint64_t, VideoSent>;
+/* Whenever a timestamp is used to represent a day, round down to Influx backup hour.
+ * Influx records ts as nanoseconds - use nanoseconds up until writing ts to stdout. */
+using Day_ns = uint64_t;
+/* I only want to type this once. */
+#define NS_PER_SEC 1000000000UL
 
 #define MAX_SSIM 0.99999    // max acceptable raw SSIM (exclusive) 
 // ignore SSIM ~ 1
@@ -527,9 +533,9 @@ class Parser {
 
         vector<string> experiments{};
 
-        /* Timestamps to be analyzed (influx export includes corrupt data outside the requested range),
-         * nanosecond Unix format. */
-        pair<uint64_t, uint64_t> dates{};
+        /* Timestamp range to be analyzed (influx export includes corrupt data outside the requested range).
+         * Any ts outside this range are rejected */
+        pair<Day_ns, Day_ns> days{};
         size_t n_bad_ts = 0;
 
         void read_experimental_settings_dump(const string & filename) {
@@ -571,7 +577,7 @@ class Parser {
         }
 
     public:
-        Parser(const string & experiment_dump_filename, uint64_t start_ts)
+        Parser(const string & experiment_dump_filename, Day_ns start_ts)
             : sessions(), sysinfos(), chunks()
         {
             sessions.set_empty_key({0,0,0,-1,-1});
@@ -583,8 +589,8 @@ class Parser {
             ostable.forward_map_vivify("unknown");
 
             read_experimental_settings_dump(experiment_dump_filename);
-            dates.first = start_ts;
-            dates.second = start_ts + 1000000000UL * 60 * 60 * 24;
+            days.first = start_ts;
+            days.second = start_ts + 60 * 60 * 24 * NS_PER_SEC;
         }
 
 
@@ -637,7 +643,7 @@ class Parser {
 
                 // skip out-of-range data points
                 const uint64_t timestamp{to_uint64(timestamp_str)};
-                if (timestamp < dates.first or timestamp > dates.second) {
+                if (timestamp < days.first or timestamp > days.second) {
                     n_bad_ts++;
                     continue;
                 }
@@ -846,7 +852,7 @@ class Parser {
 
         /* Corresponds to a line of analyze output; summarizes a stream */
         struct EventSummary {
-            uint64_t base_time{0};
+            uint64_t base_time{0};  // lowest ts in stream, in NANOseconds
             bool valid{false};      // good or bad
             bool full_extent{true}; // full or trunc
             float time_extent{0};
@@ -1155,7 +1161,7 @@ class Parser {
         }
 };
 
-void analyze_main(const string & experiment_dump_filename, uint64_t start_ts) {
+void analyze_main(const string & experiment_dump_filename, Day_ns start_ts) {
     Parser parser{ experiment_dump_filename, start_ts };
 
     parser.parse_stdin();
@@ -1165,17 +1171,20 @@ void analyze_main(const string & experiment_dump_filename, uint64_t start_ts) {
     parser.analyze_sessions();
 }
 
-/* Parse date to nanosecond Unix timestamp at 11AM UTC, e.g. 2019-11-28T11_2019-11-29T11 => 1574938800000000000 */
-optional<uint64_t> parse_date(const string & date) {
+/* Parse date to Unix timestamp (nanoseconds) at Influx backup hour, 
+ * e.g. 2019-11-28T11_2019-11-29T11 => 1574938800000000000 (for 11AM UTC backup) */
+optional<Day_ns> parse_date(const string & date) {
     const auto T_pos = date.find('T');
     const string & start_day = date.substr(0, T_pos);
 
     struct tm day_fields{};
-    // format 2019-07-01 11:00:00
-    if (not strptime((start_day + " 11:00:00").c_str(), "%Y-%m-%d %H:%M:%S", &day_fields)) {
+    ostringstream strptime_str;
+    strptime_str << start_day << " " << BACKUP_HR << ":00:00";
+    cerr << strptime_str.str() << endl;
+    if (not strptime(strptime_str.str().c_str(), "%Y-%m-%d %H:%M:%S", &day_fields)) {
         return nullopt;
     }
-    uint64_t start_ts = mktime(&day_fields) * 1000000000;
+    Day_ns start_ts = mktime(&day_fields) * NS_PER_SEC;
     return start_ts;
 }
 
@@ -1191,7 +1200,9 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         }
 
-        optional<uint64_t> start_ts = parse_date(argv[2]); 
+        optional<Day_ns> start_ts = parse_date(argv[2]); 
+        // TODO: remove
+        cerr << "start_ts (should be ns): " << start_ts.value() << endl;
         if (not start_ts) {
             cerr << "Date argument could not be parsed; format as 2019-07-01T11_2019-07-02T11\n";
             return EXIT_FAILURE;

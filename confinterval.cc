@@ -216,10 +216,12 @@ class Statistics {
     // list of watch times from which to sample
     vector<double> all_watch_times{};
 
-    using Day = uint64_t;
+    /* Whenever a timestamp is used to represent a day, round down to Influx backup hour,
+     * in seconds (analyze records ts as seconds) */
+    using Day_sec = uint64_t;
 
-    /* Days to be analyzed (read from input file) */
-    set<Day> acceptable_days{};
+    /* Day_secs to be analyzed (read from input file) */
+    set<Day_sec> acceptable_days{};
 
     // real (non-simulated) stats 
     map<string, SchemeStats> scheme_stats{};
@@ -254,7 +256,7 @@ class Statistics {
         if (!getline(intersection_file, line_storage)) {
             throw runtime_error( "error reading dates from " + intersection_filename);
         } 
-        Day day;
+        Day_sec day;
         istringstream days_line(line_storage);
         while (days_line >> day) {  
             acceptable_days.emplace(day);
@@ -267,16 +269,14 @@ class Statistics {
         for (const auto & desired_scheme : desired_schemes) {
             cerr << desired_scheme << " ";
         }
-        cerr << "\nConfint days:\n";  // TODO: remove
+        cerr << "\nConfint days:\n";  
         print_intervals(acceptable_days);
      }
 
     /* Indicates whether ts is one of the acceptable days read
      * from the input file */
     bool ts_is_acceptable(uint64_t ts) {
-        const unsigned sec_per_day = 60 * 60 * 24;
-        // acceptable times are rounded down to nearest day
-        Day day = ts / sec_per_day * sec_per_day;
+        Day_sec day = ts2Day_sec(ts);
         return acceptable_days.count(day);
     }
     
