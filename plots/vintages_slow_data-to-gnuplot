@@ -1,0 +1,64 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+print <<'END';
+set xlabel "Time spent stalled (%)" 
+set xlabel  offset character 0, 0.75, 0 font "" textcolor lt -1 norotate
+set xrange [ 1.7:.9 ] reverse writeback
+set ylabel "Average SSIM (dB)" 
+set ylabel  offset character 3, 0, 0 font "" textcolor lt -1 rotate
+set yrange [ 14:14.7 ] noreverse writeback
+set border 3 front lt black linewidth 1.000 dashtype solid
+set xtics border out scale 0.5,0.5 offset 0,0.5 nomirror norotate  autojustify
+set ytics border out scale 0.5,0.5 offset 0.25,0 nomirror norotate  autojustify
+set xtics 0.2
+set ytics 0.12
+set font "Times,10"
+set title "VINTAGES, SLOW"
+unset key
+set noclip
+END
+
+my $n = 0;
+
+my %colors = (Tetra => 0xd62728,
+	      q{Tetra-February} => 0x1f77b4,
+	      q{Tetra-March} => 0x8c564b,
+	      q{Tetra-April} => 0x2ca02c,
+	      q{Tetra-May} => 0x9467bd);
+
+my @data;
+
+while (<>) {
+  chomp;
+  next if m{^#};
+  $n++;
+  s{%}{}g;
+  s{;}{}g;
+  s{,}{}g;
+  my ($name, $stall_low, $stall_high, $stall_mean, $ssim_low, $ssim_high, $ssim_mean) = (split)[0,5,7,9,13,15,17];
+  if ($name eq q{puffer_ttp_cl/bbr} || $name eq q{Puffer}) {
+      $name = q{Tetra};
+  } elsif ($name eq q{puffer_ttp_20190202/bbr}) {
+      $name = q{Tetra-February};
+  } elsif ($name eq q{puffer_ttp_20190302/bbr}) {
+      $name = q{Tetra-March};
+  } elsif ($name eq q{puffer_ttp_20190402/bbr}) {
+      $name = q{Tetra-April};
+  } elsif ($name eq q{puffer_ttp_20190502/bbr}) {
+      $name = q{Tetra-May};
+  } 
+
+  push @data, qq{$stall_mean $ssim_mean $stall_low $stall_high $ssim_low $ssim_high $colors{$name} "$name"};
+}
+
+print qq{set terminal "svg" font "Times,20"\n};
+print qq{set errorbars 0.5\n};
+print qq{plot '-' using 1:2:3:4:5:6:7 with xyerrorbars lc rgb var lw 1.75 pt 7 ps 0.33, '-' using 1:2:8 with labels offset 0,-.5\n};
+
+print join qq{\n}, @data;
+print qq{\ne\n};
+print join qq{\n}, @data;
+print qq{\ne\n};
+
