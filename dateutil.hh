@@ -10,7 +10,7 @@
 using std::cerr;    using std::string; 
 using Day_sec = uint64_t;
 
-/* Hour of Influx backup, e.g. 11 for 11am UTC, 22 for 11pm UTC.
+/* Hour of Influx backup, e.g. 11 for 11am UTC, 23 for 11pm UTC.
  * TODO: can we pull this number from somewhere? */
 static const unsigned BACKUP_HR = 11;
 
