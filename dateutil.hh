@@ -51,8 +51,17 @@ Day_sec ts2Day_sec(uint64_t ts) {
     if (ts > 9999999999) {
         throw(std::logic_error("ts2Day_sec operates on seconds, not nanoseconds"));
     }
-    const unsigned sec_per_day = 60 * 60 * 24;
-    return ts / sec_per_day * sec_per_day + BACKUP_HR * 60 * 60;
+    const unsigned sec_per_hr = 60 * 60;
+    const unsigned sec_per_day = sec_per_hr * 24;
+    unsigned day_index = ts / sec_per_day;
+    const unsigned sec_past_midnight = ts % sec_per_day;
+    if (sec_past_midnight < BACKUP_HR * sec_per_hr) {
+        /* If ts is before backup hour, it belongs to the previous day's backup 
+         * (e.g. Jan 2 1:00 am belongs to Jan 1 11:00 am backup) */
+        day_index--;
+    }
+   
+    return day_index * sec_per_day + BACKUP_HR * sec_per_hr;
 }
 
 #endif
