@@ -1180,7 +1180,6 @@ optional<Day_ns> parse_date(const string & date) {
     struct tm day_fields{};
     ostringstream strptime_str;
     strptime_str << start_day << " " << BACKUP_HR << ":00:00";
-    cerr << strptime_str.str() << endl;
     if (not strptime(strptime_str.str().c_str(), "%Y-%m-%d %H:%M:%S", &day_fields)) {
         return nullopt;
     }
@@ -1201,8 +1200,6 @@ int main(int argc, char *argv[]) {
         }
 
         optional<Day_ns> start_ts = parse_date(argv[2]); 
-        // TODO: remove
-        cerr << "start_ts (should be ns): " << start_ts.value() << endl;
         if (not start_ts) {
             cerr << "Date argument could not be parsed; format as 2019-07-01T11_2019-07-02T11\n";
             return EXIT_FAILURE;
