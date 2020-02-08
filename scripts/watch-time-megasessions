@@ -1,0 +1,47 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+my %watch_time;
+
+# read from stdin (output by modified confinterval)
+while (<>) {
+  chomp;
+  my ( $timestamp, $goodbad, $fulltrunc, $badreason, $scheme,
+       $ip, $os, $channelchange, $init_id,
+       $extent, $usedpct, $ssim, $delivery_rate, $bitrate, $ssim_var, $startup_delay, $total_after_startup,
+       $stall_after_startup ) = split /\s+/, $_;
+
+  next if ($scheme =~ m{/cubic$});
+  next if ($channelchange == -1);
+  next if m{^#};    # skip summary lines
+
+  $scheme =~ s{/}{_};
+
+  $extent =~ s{^extent=}{}g;
+  $init_id =~ s{^init=}{}g;
+  my $adjusted_init_id = $init_id - $channelchange;
+
+  $watch_time{$scheme}{qq{$ip $adjusted_init_id}} += $extent;
+}
+
+for my $scheme ( keys %watch_time ) {
+  my @watch_times;
+  for my $megasession_id ( keys %{ $watch_time{ $scheme } } ) {
+    push @watch_times, $watch_time{ $scheme }{ $megasession_id };
+  }
+
+  my @sorted_samples = sort { $a <=> $b } @watch_times;
+
+  open OUT, qq{>watchtimes/${scheme}.cdf} or die;
+
+#  printf OUT qq{%f %f %.2f\n}, 0, 0, 0;
+
+  for (my $i = 0; $i < (scalar @sorted_samples); $i++) {
+    printf OUT qq{%f %f\n},
+      $sorted_samples[$i],
+      ($i+1) / (scalar @sorted_samples);
+  }
+
+  close OUT or die;
+}
