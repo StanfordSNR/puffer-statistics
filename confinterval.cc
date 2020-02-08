@@ -399,6 +399,8 @@ class Statistics {
                 // SSIM variation = 0 over a whole stream is questionable
                 if ( ssim_variation_db_val > 0 and ssim_variation_db_val <= 10000 ) { the_scheme->add_ssim_variation_sample(ssim_variation_db_val); }
             }
+            // output stream info for watch-time-megasessions
+            cout << line << "\n";
         }   // end while
     }
 
@@ -557,7 +559,7 @@ class Statistics {
 void confint_main(const string & intersection_filename, bool slow_sessions) {
     Statistics stats {  intersection_filename };
     stats.parse_stdin(slow_sessions);
-    stats.do_point_estimate(); 
+    // stats.do_point_estimate(); 
 }
 
 void print_usage(const string & program) {
