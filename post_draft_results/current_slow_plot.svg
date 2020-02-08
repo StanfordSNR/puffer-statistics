@@ -104,26 +104,26 @@
 <g fill="none" color="white" stroke="black" stroke-width="1.75" stroke-linecap="butt" stroke-linejoin="miter">
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.75" stroke-linecap="butt" stroke-linejoin="miter">
-	<path stroke='rgb( 44, 160,  44)'  d='M382.0,161.0 L382.0,90.1 M378.2,161.0 L385.7,161.0  '/>	<path stroke='rgb(148, 103, 189)'  d='M171.8,376.9 L171.8,322.4 M168.0,376.9 L175.5,376.9 M168.0,322.4 L175.5,322.4  '/>	<path stroke='rgb(140,  86,  75)'  d='M238.1,395.0 L238.1,326.6 M234.3,395.0 L241.8,395.0 M234.3,326.6 L241.8,326.6  '/>	<path stroke='rgb(214,  39,  40)'  d='M536.3,170.7 L536.3,97.1 M532.5,170.7 L540.0,170.7 M532.5,97.1 L540.0,97.1  '/>	<path stroke='rgb( 44, 160,  44)'  d='M415.9,125.3 L345.5,125.3 M415.9,129.1 L415.9,121.6 M345.5,129.1 L345.5,121.6  '/>	<path stroke='rgb(148, 103, 189)'  d='M225.7,350.2 L142.5,350.2 M225.7,354.0 L225.7,346.5  '/>	<path stroke='rgb(140,  86,  75)'  d='M287.9,361.6 L186.2,361.6 M287.9,365.4 L287.9,357.9 M186.2,365.4 L186.2,357.9  '/>	<path stroke='rgb(214,  39,  40)'  d='M555.3,134.9 L516.0,134.9 M555.3,138.7 L555.3,131.2 M516.0,138.7 L516.0,131.2  '/>	<use xlink:href='#gpPt6' transform='translate(382.0,125.3) scale(2.48)' color='rgb( 44, 160,  44)'/>
-	<use xlink:href='#gpPt6' transform='translate(171.8,350.2) scale(2.48)' color='rgb(148, 103, 189)'/>
-	<use xlink:href='#gpPt6' transform='translate(238.1,361.6) scale(2.48)' color='rgb(140,  86,  75)'/>
-	<use xlink:href='#gpPt6' transform='translate(536.3,134.9) scale(2.48)' color='rgb(214,  39,  40)'/>
+	<path stroke='rgb( 44, 160,  44)'  d='M396.8,167.5 L396.8,96.4 M393.0,167.5 L400.5,167.5 M393.0,96.4 L400.5,96.4  '/>	<path stroke='rgb(148, 103, 189)'  d='M199.8,388.7 L199.8,335.6 M196.0,388.7 L203.5,388.7 M196.0,335.6 L203.5,335.6  '/>	<path stroke='rgb(140,  86,  75)'  d='M265.6,398.0 L265.6,331.1 M261.8,398.0 L269.3,398.0 M261.8,331.1 L269.3,331.1  '/>	<path stroke='rgb(214,  39,  40)'  d='M535.1,183.3 L535.1,112.5 M531.3,183.3 L538.8,183.3 M531.3,112.5 L538.8,112.5  '/>	<path stroke='rgb( 44, 160,  44)'  d='M428.6,132.8 L363.3,132.8 M428.6,136.6 L428.6,129.1 M363.3,136.6 L363.3,129.1  '/>	<path stroke='rgb(148, 103, 189)'  d='M248.9,362.6 L146.5,362.6 M248.9,366.4 L248.9,358.9 M146.5,366.4 L146.5,358.9  '/>	<path stroke='rgb(140,  86,  75)'  d='M312.8,365.4 L215.3,365.4 M312.8,369.2 L312.8,361.7 M215.3,369.2 L215.3,361.7  '/>	<path stroke='rgb(214,  39,  40)'  d='M553.3,148.8 L515.7,148.8 M553.3,152.6 L553.3,145.1 M515.7,152.6 L515.7,145.1  '/>	<use xlink:href='#gpPt6' transform='translate(396.8,132.8) scale(2.48)' color='rgb( 44, 160,  44)'/>
+	<use xlink:href='#gpPt6' transform='translate(199.8,362.6) scale(2.48)' color='rgb(148, 103, 189)'/>
+	<use xlink:href='#gpPt6' transform='translate(265.6,365.4) scale(2.48)' color='rgb(140,  86,  75)'/>
+	<use xlink:href='#gpPt6' transform='translate(535.1,148.8) scale(2.48)' color='rgb(214,  39,  40)'/>
 </g>
 	</g>
 	<g id="gnuplot_plot_2" ><title>'-' using 1:2:8</title>
 <g fill="none" color="white" stroke="rgb(214,  39,  40)" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
-	<g transform="translate(382.0,146.8)" stroke="none" fill="black" font-family="Times" font-size="20.00"  text-anchor="middle">
+	<g transform="translate(396.8,154.3)" stroke="none" fill="black" font-family="Times" font-size="20.00"  text-anchor="middle">
 		<text><tspan font-family="Times" >BBA</tspan></text>
 	</g>
-	<g transform="translate(171.8,371.7)" stroke="none" fill="black" font-family="Times" font-size="20.00"  text-anchor="middle">
+	<g transform="translate(199.8,384.1)" stroke="none" fill="black" font-family="Times" font-size="20.00"  text-anchor="middle">
 		<text><tspan font-family="Times" >Pensieve</tspan></text>
 	</g>
-	<g transform="translate(238.1,383.1)" stroke="none" fill="black" font-family="Times" font-size="20.00"  text-anchor="middle">
+	<g transform="translate(265.6,386.9)" stroke="none" fill="black" font-family="Times" font-size="20.00"  text-anchor="middle">
 		<text><tspan font-family="Times" >Pensieve-in-situ</tspan></text>
 	</g>
-	<g transform="translate(536.3,156.4)" stroke="none" fill="black" font-family="Times" font-size="20.00"  text-anchor="middle">
+	<g transform="translate(535.1,170.3)" stroke="none" fill="black" font-family="Times" font-size="20.00"  text-anchor="middle">
 		<text><tspan font-family="Times" >Tetra</tspan></text>
 	</g>
 </g>
