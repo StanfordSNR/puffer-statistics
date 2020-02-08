@@ -30,7 +30,7 @@ push_args() {
 }
 
 # 2019-01-25T11_2019-01-26T11 : 2020-02-02T11_2020-02-03T11 (inclusive)
-push_args "2019-01-25" "2020-02-02"
+push_args "2019-01-25" "2020-02-03"
 
 parallel ~/puffer-statistics/plots/fetch_and_analyze.sh ::: $args
 
