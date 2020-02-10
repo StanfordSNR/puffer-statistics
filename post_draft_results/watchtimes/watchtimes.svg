@@ -115,18 +115,18 @@
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
-	<g transform="translate(288.1,333.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="middle">
+	<g transform="translate(322.0,333.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="middle">
 		<text></text>
 	</g>
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
 </g>
-	<g id="gnuplot_plot_1" ><title>Fugu (mean  +/-  min)</title>
+	<g id="gnuplot_plot_1" ><title>Fugu (mean 33.6 +/- 0.9 min)</title>
 <g fill="none" color="white" stroke="currentColor" stroke-width="2.00" stroke-linecap="butt" stroke-linejoin="miter">
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="2.00" stroke-linecap="butt" stroke-linejoin="miter">
-	<g transform="translate(463.1,333.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
-		<text xml:space="preserve"><tspan font-family="Times"  xml:space="preserve">Fugu (mean  +/-  min)</tspan></text>
+	<g transform="translate(531.0,333.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
+		<text><tspan font-family="Times" >Fugu (mean 33.6 +/- 0.9 min)</tspan></text>
 	</g>
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="2.00" stroke-linecap="butt" stroke-linejoin="miter">
@@ -851,12 +851,12 @@
 		L558.4,403.9 L558.5,403.9 L558.5,409.2 L558.8,409.2 L558.8,415.3 L559.2,415.3 L559.2,422.0 L559.3,422.0
 		L559.3,430.4 L559.5,430.4 L559.5,433.8  '/></g>
 	</g>
-	<g id="gnuplot_plot_2" ><title>MPC-HM (mean  +/-  min)</title>
+	<g id="gnuplot_plot_2" ><title>MPC-HM (mean 30.8 +/- 0.8 min)</title>
 <g fill="none" color="white" stroke="rgb(214,  39,  40)" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
-	<g transform="translate(463.1,354.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
-		<text xml:space="preserve"><tspan font-family="Times"  xml:space="preserve">MPC-HM (mean  +/-  min)</tspan></text>
+	<g transform="translate(531.0,354.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
+		<text><tspan font-family="Times" >MPC-HM (mean 30.8 +/- 0.8 min)</tspan></text>
 	</g>
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
@@ -1569,10 +1569,10 @@
 		L556.9,403.2 L556.9,408.5 L557.0,408.5 L557.0,414.5 L557.3,414.5 L557.3,421.4 L557.6,421.4 L557.6,429.5
 		L557.7,429.5 L557.7,433.8  '/></g>
 	</g>
-	<g id="gnuplot_plot_3" ><title>RobustMPC-HM (mean  +/-  min)</title>
+	<g id="gnuplot_plot_3" ><title>RobustMPC-HM (mean 31.0 +/- 0.8 min)</title>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
-	<g transform="translate(463.1,375.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
-		<text xml:space="preserve"><tspan font-family="Times"  xml:space="preserve">RobustMPC-HM (mean  +/-  min)</tspan></text>
+	<g transform="translate(531.0,375.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
+		<text><tspan font-family="Times" >RobustMPC-HM (mean 31.0 +/- 0.8 min)</tspan></text>
 	</g>
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
@@ -2285,10 +2285,10 @@
 		L556.5,408.0 L557.0,408.0 L557.0,413.9 L557.0,421.0 L557.1,421.0 L557.1,429.1 L557.3,429.1 L557.3,433.8
 		 '/></g>
 	</g>
-	<g id="gnuplot_plot_4" ><title>Pensieve (mean  +/-  min)</title>
+	<g id="gnuplot_plot_4" ><title>Pensieve (mean 31.6 +/- 0.8 min)</title>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
-	<g transform="translate(463.1,396.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
-		<text xml:space="preserve"><tspan font-family="Times"  xml:space="preserve">Pensieve (mean  +/-  min)</tspan></text>
+	<g transform="translate(531.0,396.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
+		<text><tspan font-family="Times" >Pensieve (mean 31.6 +/- 0.8 min)</tspan></text>
 	</g>
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
@@ -2999,10 +2999,10 @@
 		L554.0,388.8 L554.0,392.7 L554.8,392.7 L554.8,396.9 L555.0,396.9 L555.0,401.6 L555.0,407.0 L555.0,413.0
 		L555.2,413.0 L555.2,419.7 L555.8,419.7 L555.8,427.9 L555.8,433.8  '/></g>
 	</g>
-	<g id="gnuplot_plot_5" ><title>BBA (mean +/-  min)</title>
+	<g id="gnuplot_plot_5" ><title>BBA (mean 32.1 +/- 0.8 min)</title>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
-	<g transform="translate(463.1,417.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
-		<text xml:space="preserve"><tspan font-family="Times"  xml:space="preserve">BBA (mean +/-  min)</tspan></text>
+	<g transform="translate(531.0,417.4)" stroke="none" fill="black" font-family="Times" font-size="14.00"  text-anchor="end">
+		<text><tspan font-family="Times" >BBA (mean 32.1 +/- 0.8 min)</tspan></text>
 	</g>
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
