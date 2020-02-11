@@ -1,7 +1,9 @@
 AM_CPPFLAGS = $(CXX17_FLAGS) $(jemalloc_CFLAGS) $(jsoncpp_CFLAGS)
 AM_CXXFLAGS = $(PICKY_CXXFLAGS)
 
-bin_PROGRAMS = parser analyze confinterval
+bin_PROGRAMS = parser analyze confinterval schemedays
+
+schemedays_SOURCES = schemedays.cc
 
 parser_SOURCES = parser.cc
 parser_LDADD = $(jemalloc_LIBS)

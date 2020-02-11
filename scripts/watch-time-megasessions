@@ -2,23 +2,19 @@
 
 use strict;
 
-open SESSIONS, q{sessions-cleaned.txt} or die;
-
 my %watch_time;
 
-while (<SESSIONS>) {
+# read from stdin (output by modified confinterval)
+while (<>) {
   chomp;
-  my ( $timestamp, $goodbad, $fulltrunc, $scheme,
+  my ( $timestamp, $goodbad, $fulltrunc, $badreason, $scheme,
        $ip, $os, $channelchange, $init_id,
-       $extent, $usedpct, $startup_delay, $total_after_startup,
+       $extent, $usedpct, $ssim, $delivery_rate, $bitrate, $ssim_var, $startup_delay, $total_after_startup,
        $stall_after_startup ) = split /\s+/, $_;
 
   next if ($scheme =~ m{/cubic$});
   next if ($channelchange == -1);
-
-  next unless ($timestamp >= 1547884800 and $timestamp < 1565193009) or ($timestamp > 1567206883);
-#  next unless ($timestamp >= 1547884800 and $timestamp < 1548748800);
-
+  next if m{^#};    # skip summary lines
   $scheme =~ s{/}{_};
 
   $extent =~ s{^extent=}{}g;

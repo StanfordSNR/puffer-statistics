@@ -1,0 +1,4 @@
+#puffer_ttp_cl/bbr considered 59482 sessions, stall/watch hours: 16.665/11282.326
+#puffer_ttp_linear/bbr considered 59531 sessions, stall/watch hours: 41.568/10757.845
+puffer_ttp_cl/bbr stall ratio (95% CI): 0.13356552% .. 0.17092458%, mean= 0.15172360; SSIM (95% CI): 16.35915237 .. 16.48577104, mean= 16.42200027; SSIMvar (95% CI): 0.72788947 .. 0.73667255, mean= 0.73228101
+puffer_ttp_linear/bbr stall ratio (95% CI): 0.35217675% .. 0.40332793%, mean= 0.37750401; SSIM (95% CI): 16.46865195 .. 16.55589948, mean= 16.51205662; SSIMvar (95% CI): 0.69345885 .. 0.70236623, mean= 0.69791254
