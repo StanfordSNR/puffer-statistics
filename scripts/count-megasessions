@@ -1,0 +1,37 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+my %session;
+
+# count total sessions in input period (regardless of scheme/acceptability)
+# no ts filtering, so run over the desired input period
+# read from stdin (output by *analyze*)
+while (<>) {
+  chomp;
+
+  my ( $timestamp, $goodbad, $fulltrunc, $badreason, $scheme,
+       $ip, $os, $channelchange, $init_id,
+       $extent, $usedpct, $ssim, $delivery_rate, $bitrate, $ssim_var, $startup_delay, $total_after_startup,
+       $stall_after_startup ) = split /\s+/, $_;
+
+  next if m{^#};    # skip summary lines
+  $scheme =~ s{/}{_};
+  next if ($channelchange == -1);
+  $init_id =~ s{^init=}{}g;
+  my $adjusted_init_id = $init_id - $channelchange;
+
+  # populate total_sessions[scheme][megasession_id], if not already
+  $session{$scheme}{qq{$ip $adjusted_init_id}} = 1;
+}
+
+for my $scheme ( keys %session ) {
+  my $n_sessions_assigned = 0;
+  # for each session assigned to scheme, add 1 to nsessions in that scheme
+  for my $megasession_id ( keys %{ $session{ $scheme } } ) {
+      $n_sessions_assigned += 1;
+  }
+
+  print "$n_sessions_assigned ";
+  print "$scheme\n";
+}

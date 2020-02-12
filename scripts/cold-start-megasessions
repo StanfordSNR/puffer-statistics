@@ -1,0 +1,78 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+my %startup_delay;
+my %first_ssim;
+
+# read from stdin (output by modified confinterval)
+while (<>) {
+  chomp;
+  my ( $timestamp, $goodbad, $fulltrunc, $badreason, $scheme,
+       $ip, $os, $channelchange, $init_id,
+       $extent, $usedpct, $ssim, $delivery_rate, $bitrate, $ssim_var, $startup_delay, $total_after_startup,
+       $stall_after_startup, $first_chunk_ssim ) = split /\s+/, $_;
+
+  next if ($scheme =~ m{/cubic$});
+  next if ($channelchange == -1);
+  next if m{^#};    # skip summary lines
+
+  $scheme =~ s{/}{_};
+
+  $startup_delay =~ s{^startup_delay=}{}g;
+  $first_chunk_ssim =~ s{^first_chunk_ssim=}{}g;
+  next if ($startup_delay == -1);
+  next if ($first_chunk_ssim == -1);
+  $init_id =~ s{^init=}{}g;
+  my $adjusted_init_id = $init_id - $channelchange;
+  # If adjusted id == init id, this is the first stream in session -- record first_ssim/startup delay
+  # (over which we will average and CI)
+  if ($adjusted_init_id == $init_id) {
+    $first_ssim{$scheme}{qq{$ip $adjusted_init_id}} = $first_chunk_ssim;
+    $startup_delay{$scheme}{qq{$ip $adjusted_init_id}} = $startup_delay;
+  }
+}
+
+# Sort first_ssim for ministat (likely don't need 
+for my $scheme ( keys %first_ssim ) {
+  my @first_ssims;
+  for my $megasession_id ( keys %{ $first_ssim{ $scheme } } ) {
+    push @first_ssims, $first_ssim{ $scheme }{ $megasession_id };
+  }
+
+  my @sorted_samples = sort { $a <=> $b } @first_ssims;
+
+  open OUT, qq{>first_ssims/${scheme}.cdf} or die;
+
+#  printf OUT qq{%f %f %.2f\n}, 0, 0, 0;
+
+  for (my $i = 0; $i < (scalar @sorted_samples); $i++) {
+    printf OUT qq{%f %f\n},
+      $sorted_samples[$i],
+      ($i+1) / (scalar @sorted_samples);
+  }
+
+  close OUT or die;
+}
+
+# Sort startup_delay for ministat
+for my $scheme ( keys %startup_delay ) {
+  my @startup_delays;
+  for my $megasession_id ( keys %{ $startup_delay{ $scheme } } ) {
+    push @startup_delays, $startup_delay{ $scheme }{ $megasession_id };
+  }
+
+  my @sorted_samples = sort { $a <=> $b } @startup_delays;
+
+  open OUT, qq{>startup_delays/${scheme}.cdf} or die;
+
+#  printf OUT qq{%f %f %.2f\n}, 0, 0, 0;
+
+  for (my $i = 0; $i < (scalar @sorted_samples); $i++) {
+    printf OUT qq{%f %f\n},
+      $sorted_samples[$i],
+      ($i+1) / (scalar @sorted_samples);
+  }
+
+  close OUT or die;
+}

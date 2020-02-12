@@ -15,6 +15,7 @@ while (<>) {
   next if ($scheme =~ m{/cubic$});
   next if ($channelchange == -1);
   next if m{^#};    # skip summary lines
+
   $scheme =~ s{/}{_};
 
   $extent =~ s{^extent=}{}g;

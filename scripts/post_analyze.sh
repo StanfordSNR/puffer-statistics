@@ -37,6 +37,15 @@ for expt in ${expts[@]}; do
     if [ $expt = "current" ]; then
         schemes="pensieve/bbr,pensieve_in_situ/bbr,puffer_ttp_cl/bbr,linear_bba/bbr"
     fi
+    if [ $expt = "emu" ]; then
+        schemes="puffer_ttp_emu/bbr,mpc/bbr,robust_mpc/bbr,linear_bba/bbr,puffer_ttp_cl/bbr,pensieve/bbr"
+    fi
+    if [ $expt = "mle" ]; then
+        schemes="puffer_ttp_cl_mle/bbr,puffer_ttp_cl/bbr"
+    fi   
+    if [ $expt = "linear" ]; then
+        schemes="puffer_ttp_linear/bbr,puffer_ttp_cl/bbr"
+    fi   
     
     # get intersection using scheme days list
     ~/puffer-statistics/schemedays $scheme_days_file --intersect-schemes $schemes --intersect-outfile $intx_out 2> $intx_err
