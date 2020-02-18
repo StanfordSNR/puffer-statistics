@@ -1,7 +1,6 @@
 #ifndef WATCHTIMESUTIL_HH
 #define WATCHTIMESUTIL_HH
 
-#include <stdexcept>
 // min and max acceptable watch time bin indices (inclusive)
 constexpr static unsigned int MIN_BIN = 2;
 constexpr static unsigned int MAX_BIN = 20;

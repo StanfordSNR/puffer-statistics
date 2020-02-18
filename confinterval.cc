@@ -15,7 +15,7 @@
 #include <getopt.h>
 #include <cassert>
 #include "dateutil.hh"
-#include <watchtimesutil.hh>
+#include "watchtimesutil.hh"
 
 #include <sys/time.h>
 #include <sys/resource.h>

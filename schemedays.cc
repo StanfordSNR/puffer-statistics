@@ -16,7 +16,7 @@
 #include <cassert>
 #include <set>
 #include "dateutil.hh"
-#include <watchtimesutil.hh>
+#include "watchtimesutil.hh"
 
 #include <sys/time.h>
 #include <sys/resource.h>
