@@ -14,7 +14,8 @@
 #include <iomanip>
 #include <getopt.h>
 #include <cassert>
-#include <dateutil.hh>
+#include "dateutil.hh"
+#include <watchtimesutil.hh>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -26,8 +27,9 @@ using namespace std::literals;
  * From stdin, parses output of analyze, which contains one line per stream summary.
  * To stdout, outputs each scheme's mean stall ratio, SSIM, and SSIM variance,
  * along with confidence intervals. 
- * Takes as argument the file containing desired schemes and the days they intersect 
- * (from schemedays --intersect-outfile)
+ * Takes as arguments the file containing desired schemes and the days they intersect 
+ * (from schemedays --intersect-outfile), and the file containing watch times
+ * (from schemedays --build-watchtimes-list)
  * Stall ratio is calculated over simulated samples;
  * SSIM/SSIMvar is calculated over real samples.
  */
@@ -104,12 +106,10 @@ double raw_ssim_to_db(const double raw_ssim) {
     return -10.0 * log10( 1 - raw_ssim );
 }
 
+
 struct SchemeStats {
-    // min and max acceptable watch time bin indices (inclusive)
-    constexpr static unsigned int MIN_BIN = 2;
-    constexpr static unsigned int MAX_BIN = 20;
-    // Stall ratio data from *real* distribution
-    array<vector<double>, 32> binned_stall_ratios{};
+     // Stall ratio data from *real* distribution
+    array<vector<double>, MAX_N_BINS> binned_stall_ratios{};
 
     unsigned int samples = 0;
     double total_watch_time = 0;
@@ -121,11 +121,12 @@ struct SchemeStats {
 
     double total_ssim_watch_time = 0;
 
-    // bin = log(watch time), if watch time : [2^2, 2^20] 
+    /* Given watch time in seconds, return bin index as 
+     * log(watch time), if watch time : [2^MIN_BIN, 2^MAX_BIN] (else, throw) */
     static unsigned int watch_time_bin(const double raw_watch_time) {
         const unsigned int watch_time_bin = lrintf(floorf(log2(raw_watch_time)));    
         if (watch_time_bin < MIN_BIN or watch_time_bin > MAX_BIN) {
-            throw runtime_error("binned watch time error");
+            throw std::runtime_error("watch time bin out of range");
         }
         return watch_time_bin;
     }
@@ -214,7 +215,7 @@ struct SchemeStats {
 
 class Statistics {
     // list of watch times from which to sample
-    vector<double> all_watch_times{};
+    vector<double> all_watch_times{}; 
 
     /* Whenever a timestamp is used to represent a day, round down to Influx backup hour,
      * in seconds (analyze records ts as seconds) */
@@ -226,8 +227,8 @@ class Statistics {
     // real (non-simulated) stats 
     map<string, SchemeStats> scheme_stats{};
 
-    public:     // TODO: some of this could be private (same in schemedays) 
-     Statistics (const string & intersection_filename) {
+    public:     
+     Statistics (const string & intersection_filename, const string & watch_times_filename) {
         vector<string> desired_schemes;
         /* Read file containing desired schemes, and list of days they intersect */
         read_intersection_file(intersection_filename, desired_schemes);
@@ -235,8 +236,10 @@ class Statistics {
         for (const string & scheme : desired_schemes) {
             scheme_stats[scheme] = SchemeStats{};
         }
+        /* Read file containing watch times */
+        read_watch_times_file(watch_times_filename);
     }
-        
+
      void read_intersection_file(const string & intersection_filename, vector<string> & desired_schemes) {
         ifstream intersection_file;
         intersection_file.open(intersection_filename);
@@ -272,7 +275,31 @@ class Statistics {
         cerr << "\nConfint days:\n";  
         print_intervals(acceptable_days);
      }
+        
+     void read_watch_times_file(const string & watch_times_filename) {
+        ifstream watch_times_file;
+        watch_times_file.open(watch_times_filename);
+        if (not watch_times_file.is_open()) {
+            throw runtime_error( "can't open " + watch_times_filename);
+        }
+        string line_storage;
+        double watch_time;
+        if (!getline(watch_times_file, line_storage)) {
+            throw runtime_error("error reading " + watch_times_filename);
+        }
+        istringstream line(line_storage);
+        while (line >> watch_time) {
+            all_watch_times.emplace_back(watch_time);
+        }
 
+        watch_times_file.close();
+        if (watch_times_file.bad()) {
+            throw runtime_error("error reading " + watch_times_filename);
+        }
+        // shuffle all watch times before sampling
+        random_shuffle(all_watch_times.begin(), all_watch_times.end());
+     }
+    
     /* Indicates whether ts is one of the acceptable days read
      * from the input file */
     bool ts_is_acceptable(uint64_t ts) {
@@ -350,12 +377,9 @@ class Statistics {
 
             const double watch_time = to_double(scratch[1]);
 
-            if (watch_time < 4) {
+            if (watch_time < (1 << MIN_BIN)) {
                 continue;
             }
-
-            // record distribution of *all* watch times (independent of scheme)
-            all_watch_times.push_back(watch_time);
 
             split_on_char(time_stalled, '=', scratch);
             if (scratch[0] != "stall_after_startup"sv) {
@@ -408,12 +432,12 @@ class Statistics {
      * in the per-scheme stall ratio distribution
      * representing the input to analyze.
      */
-    static pair<double, double> simulate( const vector<double> & all_watch_times,
-            default_random_engine & prng,
-            const SchemeStats & /* real */scheme ) {
-        /* step 1: draw a random watch duration */ 
-        uniform_int_distribution<> possible_watch_time_index(0, all_watch_times.size() - 1); 
-        const double simulated_watch_time = all_watch_times.at(possible_watch_time_index(prng)); 
+    static pair<double, double> simulate(const vector<double> & all_watch_times,
+                                         default_random_engine & prng,
+                                         const SchemeStats & /* real */ scheme ) {
+        /* step 1: draw a random watch time from static watch times samples */ 
+        uniform_int_distribution<> possible_watch_time_index(0, all_watch_times.size() - 1);
+        const double simulated_watch_time = all_watch_times.at(possible_watch_time_index(prng));
 
         /* step 2: draw a stall ratio for the scheme from a similar observed watch time */
         unsigned int simulated_watch_time_binned = SchemeStats::watch_time_bin(simulated_watch_time);
@@ -423,19 +447,16 @@ class Statistics {
             // scheme has nonempty bin corresponding to the simulated watch time => 
             // draw stall ratio from that bin
             uniform_int_distribution<> possible_stall_ratio_index(0, num_stall_ratio_samples - 1);
+            // multiply stall ratio by un-binned simulated watch time, since stall ratio uses un-binned real watch time
             const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(possible_stall_ratio_index(prng));
 
             return {simulated_watch_time, simulated_stall_time};
         } else {
-            if (simulated_watch_time_binned == 0) { // watch_time_bin already throws if bin < 2
-                throw runtime_error("no small session stall_ratios?");
-            }
-            
             /* If simulated bin is empty, draw from aggregate over left and right bins; throw if both empty */
-            const size_t left_num_stall_ratio_samples = simulated_watch_time_binned > scheme.MIN_BIN ? 
+            const size_t left_num_stall_ratio_samples = simulated_watch_time_binned > MIN_BIN ? 
                                                         scheme.binned_stall_ratios.at(simulated_watch_time_binned - 1).size() 
                                                         : 0;
-            const size_t right_num_stall_ratio_samples = simulated_watch_time_binned < scheme.MAX_BIN ? 
+            const size_t right_num_stall_ratio_samples = simulated_watch_time_binned < MAX_BIN ? 
                                                         scheme.binned_stall_ratios.at(simulated_watch_time_binned + 1).size() 
                                                         : 0;
             if (left_num_stall_ratio_samples == 0 && right_num_stall_ratio_samples == 0) {
@@ -461,8 +482,8 @@ class Statistics {
     /* For each sample in (real) scheme, take a simulated sample 
      * Return resulting simulated total stall ratio */
     static double simulate_realization( const vector<double> & all_watch_times,
-            default_random_engine & prng,
-            const SchemeStats & /* real */scheme ) {
+                                        default_random_engine & prng,
+                                        const SchemeStats & /* real */scheme ) {
         SchemeStats scheme_simulated;
 
         for ( unsigned int i = 0; i < scheme.samples; i++ ) {
@@ -483,8 +504,8 @@ class Statistics {
         public:
         Realizations( const string & name, const SchemeStats & scheme_sample ) : _name(name), _scheme_sample(scheme_sample) {}
 
-        void add_realization( const vector<double> & all_watch_times,
-                default_random_engine & prng ) {
+        void add_realization( const vector<double> & all_watch_times, 
+                              default_random_engine & prng ) {
             _stall_ratios.push_back(simulate_realization(all_watch_times, prng, _scheme_sample));   // pass in real stats
         }
 
@@ -554,17 +575,24 @@ class Statistics {
     }
 };
 
-void confint_main(const string & intersection_filename, bool slow_sessions) {
-    Statistics stats {  intersection_filename };
+void confint_main(const string & intersection_filename, const string & watch_times_filename,
+                  bool slow_sessions) {
+    Statistics stats {  intersection_filename, watch_times_filename };
     stats.parse_stdin(slow_sessions);
     stats.do_point_estimate(); 
 }
 
+// TODO: update usage here if change name of schemedays program
 void print_usage(const string & program) {
-    cerr << "Usage: " << program << " --scheme-intersection <intersection_filename> --session-speed <session_speed>\n" 
+    cerr << "Usage: " << program 
+         << " --scheme-intersection <intersection_filename>"
+            " --session-speed <session_speed>"
+            " --watch-times <watch_times_filename>\n"
             "intersection_filename: Output of schemedays --intersect-schemes --intersect-outfile, "
             "containing desired schemes and the days they intersect.\n"
-            "session_speed: slow or all\n";
+            "session_speed: slow or all\n"
+            "watch_times_filename: Output of schemedays --build-watch_times-list, "
+            "containing binned watch times.\n";
 }
 
 int main(int argc, char *argv[]) {
@@ -575,13 +603,14 @@ int main(int argc, char *argv[]) {
         const option opts[] = {
             {"scheme-intersection", required_argument, nullptr, 'i'},
             {"session-speed", required_argument, nullptr, 's'},
+            {"watch-times", required_argument, nullptr, 'w'},
             {nullptr, 0, nullptr, 0}
         };
-        string intersection_filename;
+        string intersection_filename, watch_times_filename;
         string session_speed;
 
         while (true) {
-            const int opt = getopt_long(argc, argv, "i:s:", opts, nullptr);
+            const int opt = getopt_long(argc, argv, "i:s:w:", opts, nullptr);
             if (opt == -1) break;
             switch (opt) {
                 case 'i': 
@@ -589,6 +618,9 @@ int main(int argc, char *argv[]) {
                     break;
                 case 's':
                     session_speed = optarg;
+                    break;
+                case 'w':
+                    watch_times_filename = optarg;
                     break;
                 default:
                     print_usage(argv[0]);
@@ -600,14 +632,15 @@ int main(int argc, char *argv[]) {
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
-        if (intersection_filename.empty() or (session_speed != "slow" and session_speed != "all")) {
-            cerr << "Error: Scheme days file and session speed (slow or all) are required\n";
+        if (intersection_filename.empty() or watch_times_filename.empty() or 
+                (session_speed != "slow" and session_speed != "all")) {
+            cerr << "Error: Scheme days file, watch time file, and session speed (slow or all) are required\n";
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
 
         bool slow_sessions = session_speed == "slow";
-        confint_main(intersection_filename, slow_sessions); 
+        confint_main(intersection_filename, watch_times_filename, slow_sessions); 
         
     } catch (const exception & e) {
         cerr << e.what() << "\n";

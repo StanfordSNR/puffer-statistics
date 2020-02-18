@@ -15,7 +15,8 @@
 #include <getopt.h>
 #include <cassert>
 #include <set>
-#include <dateutil.hh>
+#include "dateutil.hh"
+#include <watchtimesutil.hh>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -25,16 +26,15 @@ using namespace std::literals;
 
 /** 
  * From stdin, parses output of analyze, which contains one line per stream summary.
- * To output file, writes a list of days each scheme has run, used to determine the dates to analyze.\n"
- */
+ * Takes *one* of the following actions:
+ * 1. Write a list of days each scheme has run (used to find intersection)
+ * 2. Find the intersection of multiple schemes' days (used to determine the dates to analyze)
+ * 3. Write a list of watchtimes (used to sample random watch times) */
+enum Action {NONE, SCHEMEDAYS_LIST, INTERSECT, WATCHTIMES_LIST};
 
 /* Whenever a timestamp is used to represent a day, round down to Influx backup hour,
  * in seconds (analyze records ts as seconds) */
 using Day_sec = uint64_t;
-
-/* Program either writes a list of schemedays to file, or reads the list from file
- * and uses it to find the intersection of multiple schemes' days. */
-enum Action {NONE, BUILD_LIST, INTERSECTION};
 
 size_t memcheck() {
     rusage usage{};
@@ -81,30 +81,56 @@ uint64_t to_uint64(string_view str) {
     return ret;
 }
 
+double to_double(const string_view str) {
+    /* sadly, g++ 8 doesn't seem to have floating-point C++17 from_chars() yet
+       float ret;
+       const auto [ptr, ignore] = from_chars(str.data(), str.data() + str.size(), ret);
+       if (ptr != str.data() + str.size()) {
+       throw runtime_error("could not parse as float: " + string(str));
+       }
+
+       return ret;
+       */
+
+    /* apologies for this */
+    char * const null_byte = const_cast<char *>(str.data() + str.size());
+    char old_value = *null_byte;
+    *null_byte = 0;
+
+    const double ret = atof(str.data());
+
+    *null_byte = old_value;
+
+    return ret;
+}
+
 class SchemeDays {
 
     /* For each scheme, records all unique days the scheme ran, 
      * according to input data */
     map<string, set<Day_sec>> scheme_days{};
 
-    /* File storing scheme_days */
-    string scheme_days_filename;
+    /* Records all watch times, in order of input data. */
+    vector<double> all_watch_times{}; 
+
+    /* File storing scheme_days or watch_times */
+    string list_filename;
 
     public: 
-    // Populate scheme_days map
-    SchemeDays (const string & scheme_days_filename, Action action): 
-                scheme_days_filename(scheme_days_filename) {  
-        if (action == BUILD_LIST) {
+    // Populate scheme_days or watch_times map
+    SchemeDays (const string & list_filename, Action action): 
+                list_filename(list_filename) {  
+        if (action == SCHEMEDAYS_LIST or action == WATCHTIMES_LIST) {
             // populate from stdin (i.e. analyze output)
-            parse_stdin(); 
-        } else {
+            parse_stdin(action); 
+        } else if (action == INTERSECT) {
             // populate from input file 
             read_scheme_days();
         }
     }
 
-    /* Populate scheme_days map from stdin */
-    void parse_stdin() {
+    /* Populate scheme_days or watch_times map from stdin */
+    void parse_stdin(Action action) {
         ios::sync_with_stdio(false);
         string line_storage;
 
@@ -134,19 +160,40 @@ class SchemeDays {
             }
 
             split_on_char(line, ' ', fields);
-            if (fields.size() != 18) {
+            if (fields.size() != 18) {  // TODO: confinterval also uses this number
                 throw runtime_error("Bad line: " + line_storage);
             }
 
             string_view& ts_str = fields[0];
             string_view& scheme = fields[4];
+            string_view& time_after_startup = fields[16];
 
             const uint64_t ts = to_uint64(ts_str);
+            
+            split_on_char(time_after_startup, '=', scratch);
+            if (scratch[0] != "total_after_startup"sv) {
+                throw runtime_error("field mismatch");
+            }
 
-            /* Record this stream's day for the corresponding scheme, 
-             * regardless of stream characteristics */
-            record_scheme_day(ts, string(scheme));
+            const double watch_time = to_double(scratch[1]);
+
+            if (action == SCHEMEDAYS_LIST) {
+                /* Record this stream's day for the corresponding scheme, 
+                 * regardless of stream characteristics */
+                record_scheme_day(ts, string(scheme));
+            } else if (action == WATCHTIMES_LIST) {
+                /* Record this stream's watch time in the corresponding bin
+                 * regardless of stream characteristics */
+                record_watch_time(watch_time);
+            }
         }   
+    }
+
+    void record_watch_time(double watch_time) {
+        if (watch_time < (1 << MIN_BIN) or watch_time > (1 << MAX_BIN)) {
+            return;   // TODO: check this is what we want. Also, should we ignore wt > max in confint? rn, would throw
+        }
+        all_watch_times.push_back(watch_time);
     }
 
     /* Given the base timestamp and scheme of a stream, add 
@@ -159,52 +206,72 @@ class SchemeDays {
 
     /* Read scheme days from filename into scheme_days map */
     void read_scheme_days() {
-        ifstream scheme_days_file {scheme_days_filename};
-        if (not scheme_days_file.is_open()) {
-            throw runtime_error( "can't open " + scheme_days_filename );
+        ifstream list_file {list_filename};
+        if (not list_file.is_open()) {
+            throw runtime_error( "can't open " + list_filename );
         }
 
         string line_storage;
         string scheme;
         Day_sec day;
 
-        while (getline(scheme_days_file, line_storage)) {
+        while (getline(list_file, line_storage)) {
             istringstream line(line_storage);
-            line >> scheme;
+            if (not (line >> scheme)) {
+                throw runtime_error("error reading scheme from " + list_filename);
+            }
             while (line >> day) {   // read all days
                 scheme_days[scheme].emplace(day);
             }
         } 
-        scheme_days_file.close();   
-        if (scheme_days_file.bad()) {
-            throw runtime_error("error reading " + scheme_days_filename);
+        list_file.close();   
+        if (list_file.bad()) {
+            throw runtime_error("error reading " + list_filename);
         }
     }
 
-
     /* Write map of scheme days to file */
     void write_scheme_days() {
-        ofstream scheme_days_file;
-        scheme_days_file.open(scheme_days_filename);
-        if (not scheme_days_file.is_open()) {
-            throw runtime_error( "can't open " + scheme_days_filename);
+        ofstream list_file;
+        list_file.open(list_filename);
+        if (not list_file.is_open()) {
+            throw runtime_error( "can't open " + list_filename);
         }
         // line format:
         // mpc/bbr 1565193009 1567206883 1567206884 1567206885 ...
         for (const auto & [scheme, days] : scheme_days) {
-            scheme_days_file << scheme;
+            list_file << scheme;
             for (const Day_sec & day : days) {
-                scheme_days_file << " " << day;
+                list_file << " " << day;
             }
-            scheme_days_file << "\n";
+            list_file << "\n";
         }
-        scheme_days_file.close();   
-        if (scheme_days_file.bad()) {
-            throw runtime_error("error writing " + scheme_days_filename);
+        list_file.close();   
+        if (list_file.bad()) {
+            throw runtime_error("error writing " + list_filename);
         }
     }
-    
-    void print_summary() {
+        
+    /* Write map of watch times to file */
+    void write_watch_times() {
+        ofstream list_file;
+        list_file.open(list_filename);
+        if (not list_file.is_open()) {
+            throw runtime_error( "can't open " + list_filename);
+        }
+        // file is single line of space-separated times
+        for (const double watch_time : all_watch_times) {
+            list_file << watch_time << " ";
+        }
+        list_file.close();   
+        if (list_file.bad()) {
+            throw runtime_error("error writing " + list_filename);
+        }
+    }
+
+    /* Human-readable summary of days each scheme ran 
+     * (output file is not particularly fun to read). */
+    void print_schemedays_summary() {
         cerr << "In-memory scheme_days:\n";
         for (const auto & [scheme, days] : scheme_days) {
             cerr << "\n" << scheme << "\n"; 
@@ -277,28 +344,33 @@ class SchemeDays {
     }
 };
 
-void scheme_days_main(const string & scheme_days_filename, const string & desired_schemes,
+void scheme_days_main(const string & list_filename, const string & desired_schemes,
                       const string & intersection_filename, Action action) {
-    // populates map from input data or file
-    SchemeDays scheme_days {scheme_days_filename, action};
-    if (action == BUILD_LIST) {
-        /* Analyze output => scheme days file */
+    // Populates schemedays/watchtimes map from input data or file
+    SchemeDays scheme_days {list_filename, action};
+    if (action == SCHEMEDAYS_LIST) {
+        /* Scheme days map => scheme days file */
         scheme_days.write_scheme_days(); 
-        scheme_days.print_summary();    
-    } else {
+        scheme_days.print_schemedays_summary();    
+    } else if (action == INTERSECT) {
         /* Desired schemes, scheme days file => intersecting days */
         scheme_days.intersect(desired_schemes, intersection_filename);    
+    } else if (action == WATCHTIMES_LIST) {
+        /* Watch times map => watch times file */
+        scheme_days.write_watch_times(); 
     }
 }
-
+// TODO: rename program (reflect that it generates args to confinterval)
 void print_usage(const string & program) {
-    cerr << "Usage: " << program << " <scheme_days_filename> <action>\n" 
-        << "Action: One of\n" 
-        << "\t --build-list: Read analyze output from stdin, and write to scheme_days_filename "
-        "the list of days each scheme was run \n"
-        << "\t --intersect-schemes <schemes> --intersect-outfile <intersection_filename>: For the given schemes "
-        "(i.e. primary, vintages, or comma-separated list e.g. mpc/bbr,puffer_ttp_cl/bbr), "
-        "read from scheme_days_filename, and write to intersection_filename the schemes and intersecting days\n";
+    cerr << "Usage: " << program << " <list_filename> <action>\n" 
+         << "Action: One of\n" 
+         << "\t --build-schemedays-list: Read analyze output from stdin, and write to list_filename "
+            "the list of days each scheme was run \n"
+         << "\t --intersect-schemes <schemes> --intersect-outfile <intersection_filename>: For the given schemes "
+            "(i.e. primary, vintages, or comma-separated list e.g. mpc/bbr,puffer_ttp_cl/bbr), "
+            "read from list_filename, and write to intersection_filename the schemes and intersecting days\n"
+         << "\t --build-watchtimes-list: Read analyze output from stdin, and write to list_filename "
+            "the binned watch times \n";
 }
 
 int main(int argc, char *argv[]) {
@@ -308,9 +380,10 @@ int main(int argc, char *argv[]) {
         }
 
         const option actions[] = {
-            {"build-list", no_argument, nullptr, 'b'},
+            {"build-schemedays-list", no_argument, nullptr, 'd'},
             {"intersect-schemes", required_argument, nullptr, 's'},
             {"intersect-outfile", required_argument, nullptr, 'o'},
+            {"build-watchtimes-list", no_argument, nullptr, 'w'},
             {nullptr, 0, nullptr, 0}
         };
         Action action = NONE;
@@ -318,34 +391,42 @@ int main(int argc, char *argv[]) {
         string intersection_filename;
 
         while (true) {
-            const int opt = getopt_long(argc, argv, "bo:s:", actions, nullptr);
+            const int opt = getopt_long(argc, argv, "ds:o:w", actions, nullptr);
             if (opt == -1) break;
             switch (opt) {
-                case 'b':
-                    if (action == INTERSECTION) {
+                case 'd':
+                    if (action != NONE) {
                         cerr << "Error: Only one action can be selected\n";
                         print_usage(argv[0]);
                         return EXIT_FAILURE;
                     }
-                    action = BUILD_LIST;
+                    action = SCHEMEDAYS_LIST;
                     break;
                 case 's':
-                    if (action == BUILD_LIST) {
+                    if (action != NONE and action != INTERSECT) {
                         cerr << "Error: Only one action can be selected\n";
                         print_usage(argv[0]);
                         return EXIT_FAILURE;
                     }
-                    action = INTERSECTION;
+                    action = INTERSECT;
                     desired_schemes = optarg;
                     break;
                 case 'o':
-                    if (action == BUILD_LIST) {
+                    if (action != NONE and action != INTERSECT) {
                         cerr << "Error: Only one action can be selected\n";
                         print_usage(argv[0]);
                         return EXIT_FAILURE;
                     }
-                    action = INTERSECTION;
+                    action = INTERSECT;
                     intersection_filename = optarg;
+                    break;
+                case 'w':
+                    if (action != NONE) {
+                        cerr << "Error: Only one action can be selected\n";
+                        print_usage(argv[0]);
+                        return EXIT_FAILURE;
+                    }
+                    action = WATCHTIMES_LIST;
                     break;
                 default:
                     print_usage(argv[0]);
@@ -354,18 +435,18 @@ int main(int argc, char *argv[]) {
         }
 
         if (optind != argc - 1 or action == NONE) {
-            cerr << "Error: Filename and action are required\n";
+            cerr << "Error: List_filename and action are required\n";
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
-        if (action == INTERSECTION and (desired_schemes.empty() or intersection_filename.empty())) {
+        if (action == INTERSECT and (desired_schemes.empty() or intersection_filename.empty())) {
             cerr << "Error: Intersection requires schemes list and outfile\n";
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
 
-        string scheme_days_filename = argv[optind]; 
-        scheme_days_main(scheme_days_filename, desired_schemes, intersection_filename, action);
+        string list_filename = argv[optind];     
+        scheme_days_main(list_filename, desired_schemes, intersection_filename, action);
 
     } catch (const exception & e) {
         cerr << e.what() << "\n";
