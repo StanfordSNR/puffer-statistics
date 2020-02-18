@@ -592,7 +592,7 @@ void print_usage(const string & program) {
             "containing desired schemes and the days they intersect.\n"
             "session_speed: slow or all\n"
             "watch_times_filename: Output of schemedays --build-watch_times-list, "
-            "containing binned watch times.\n";
+            "containing watch times.\n";
 }
 
 int main(int argc, char *argv[]) {

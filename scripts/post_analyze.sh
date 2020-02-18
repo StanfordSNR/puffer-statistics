@@ -16,17 +16,22 @@ if [ ! -d $1 ]; then
 fi
 
 pushd $1
-mkdir results
-cd results
+results_dir="results"
+mkdir $results_dir
+cd $results_dir
 
 # Output of schemedays --build-list, input of schemedays --intersect
 scheme_days_file="scheme_days.txt"
 # Readable summary of days each scheme has run
 scheme_days_summary="scheme_days_summary.txt"
+# Output of schemedays --build-watchtimes-list, input of confinterval 
+watch_times_file="watch_times.txt"
 
 # build scheme days list
-cat ../*stats.txt | ~/puffer-statistics/schemedays $scheme_days_file --build-list 2> $scheme_days_summary 
-echo "finished schemedays --build-list"
+cat ../*stats.txt | ~/puffer-statistics/schemedays $scheme_days_file --build-schemedays-list 2> $scheme_days_summary 
+echo "finished schemedays --build-schemedays-list"
+cat ../*stats.txt | ~/puffer-statistics/schemedays $watch_times_file --build-watchtimes-list 2> $scheme_days_summary 
+echo "finished schemedays --build-watchtimes-list"
 
 expts=("primary" "vintages" "current")    
 
@@ -61,10 +66,11 @@ for expt in ${expts[@]}; do
         plot="${expt}_${speed}_plot.svg"
         d2g="${expt}_${speed}_data-to-gnuplot"
         
-        cat ../*stats.txt | ~/puffer-statistics/confinterval --scheme-intersection $intx_out --session-speed $speed > $confint_out 2> $confint_err
+        cat ../*stats.txt | ~/puffer-statistics/confinterval --scheme-intersection $intx_out \
+            --session-speed $speed --watch-times $watch_times_file > $confint_out 2> $confint_err
         echo "finished confinterval"
         # Useful if there's a version of d2g for each expt/speed
-        #cat $confint_out | ~/puffer-statistics/plots/${d2g} | gnuplot > $plot 
+        cat $confint_out | ~/puffer-statistics/plots/${d2g} | gnuplot > $plot 
     done
 done
 
