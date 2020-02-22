@@ -317,23 +317,17 @@ class Parser {
             }
         }
 
-        /* Given stream_ids iterator, return pointer to its session ID
-         * so we can set it in-place. */
-        public_session_id* p_session_id(stream_ids_iterator stream_id_it) const {
-            public_stream_id* p_public_stream_id = &stream_id_it->second;
-            return &p_public_stream_id->session_id;
-        }
-
         /* Called when stream is found corresponding to a session that hasn't yet been inserted to the map. */
         void record_new_session(const private_stream_id& private_id) {
             /* Generate session id in-place, record with channel_changes = 0 */
             pair<private_stream_id, public_stream_id> stream_id_mapping(private_id, public_stream_id{});
-            pair<stream_ids_iterator, bool> new_public_id = stream_ids.insert(stream_id_mapping);
-            int entropy_ret = getentropy(p_session_id(new_public_id.first), BYTES_OF_ENTROPY);
+            pair<stream_ids_iterator, bool> insertion = stream_ids.insert(stream_id_mapping);
+            public_stream_id& public_stream_id = insertion.first->second;
+            int entropy_ret = getentropy(public_stream_id.session_id.data(), BYTES_OF_ENTROPY);
             if (entropy_ret != 0) {
                 throw runtime_error(string("Failed to generate public session ID: ") + strerror(errno));
             }
-            for (char & c : *p_session_id(new_public_id.first)) {
+            for (char & c : public_stream_id.session_id) {
                 // TODO: hack to display special csv characters: comma, CR, LF, or double quote (RFC 4180)
                 if (c == ',' || c == '\r' || c == '\n' || c == '\"') {
                     c = 'a';
@@ -398,11 +392,9 @@ class Parser {
                         } else {
                             /* Already recorded this session (but not this stream) => 
                              * copy other stream's session id, record channel_changes, add to map */
-                            public_stream_id public_id{};   // session_id will be copied in
-                            public_id.channel_changes = channel_changes;
-                            pair<private_stream_id, public_stream_id> stream_id_mapping(private_id, public_id);
-                            pair<stream_ids_iterator, bool> new_public_id = stream_ids.insert(stream_id_mapping);
-                            memcpy(p_session_id(new_public_id.first), p_session_id(found_stream_id), BYTES_OF_ENTROPY);
+                            public_stream_id& found_public_id = found_stream_id->second;
+                            public_stream_id new_public_id{found_public_id.session_id, channel_changes};  
+                            stream_ids[private_id] = new_public_id;
                         }
                     }    
                 }   // end client_buffer[server] loop 
@@ -421,7 +413,7 @@ class Parser {
                     assert (found_stream_id != stream_ids.end());   // every stream should have been assigned an ID
 
                     public_stream_id public_id = found_stream_id->second;
-                    cerr << "session ID " << public_id.session_id 
+                    cerr << "session ID " << public_id.session_id.data()
                          << "\nchannel changes (always 0 if has first_init_id) " << public_id.channel_changes << endl;
                 }
             }
@@ -468,7 +460,7 @@ class Parser {
   
                     client_buffer_file << ts << ",";
                     // write session_id as raw bytes
-                    client_buffer_file.write(public_id.session_id, BYTES_OF_ENTROPY);
+                    client_buffer_file.write(public_id.session_id.data(), BYTES_OF_ENTROPY);
                     client_buffer_file << "," << channel_changes
                                        << "," << *event.expt_id << "," << *event.channel << "," 
                                        << string_view(*event.type) << "," << *event.buffer << "," << *event.cum_rebuf << "\n";

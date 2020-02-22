@@ -59,9 +59,9 @@ class Parser {
         string_table ostable{};
 
         // streams[public_stream_id] = vec<[ts, Event]>
-        //using stream_key = tuple<public_session_id, unsigned>;   // unpack struct for the hash
-        /*                                      channel_changes */
-        //dense_hash_map<stream_key, vector<pair<uint64_t, Event>>, boost::hash<stream_key>> streams;
+        using stream_key = tuple<public_session_id, unsigned>;   // unpack struct for hash
+        /*                                          channel_changes */
+        dense_hash_map<stream_key, vector<pair<uint64_t, Event>>, boost::hash<stream_key>> streams;
 
         // sysinfos[sysinfo_key] = SysInfo
         using sysinfo_key = tuple<uint32_t, uint32_t, uint32_t>;
@@ -75,10 +75,10 @@ class Parser {
 
     public:
         Parser()
-            : /*streams(),*/ sysinfos(), chunks()
+            : streams(), sysinfos(), chunks()
         {
-            // TODO: check how empty keys are used 
-            //streams.set_empty_key( { {0}, 0} ); 
+            // TODO: check sysinfo/chunks empty keys are used ; may need elem-by-elem print
+            streams.set_empty_key( { {0}, -1U} );    // we never insert a stream with channel_changes -1
             sysinfos.set_empty_key({0,0,0});
             chunks.set_empty_key({{0},0});
 
@@ -107,7 +107,7 @@ class Parser {
             // ignore column labels
             getline(client_buffer_file, line_storage);
            
-            cout << "\nParsed events\n: " << endl;
+            cout << "\nParsed events:\n" << endl;
             while (getline(client_buffer_file, line_storage)) {
 
                 istringstream line(line_storage);
@@ -115,7 +115,7 @@ class Parser {
                 // read ts
                 if (not (line >> ts >> comma and                
                          // read stream id as raw bytes
-                         line.read(stream_id.session_id, BYTES_OF_ENTROPY) and
+                         line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and
                          line >> comma >> stream_id.channel_changes >> comma >> expt_id >> comma and 
                          getline(line, channel, ',') and getline(line, event_type_str, ',') and
                          line >> buffer >> comma >> cum_rebuf ) ) {
@@ -125,12 +125,12 @@ class Parser {
                 // no need to fill in private fields
                 Event event{nullopt, nullopt, expt_id, nullopt, string_view(event_type_str), 
                             buffer, cum_rebuf, channel};
-                cout << "channel changes " << stream_id.channel_changes << endl;
                 cout << "ts " << ts << endl; 
-                cout << "session ID " << stream_id.session_id << endl;
+                cout << "channel changes " << stream_id.channel_changes << endl;
+                cout << "session ID " << stream_id.session_id.data() << endl;
                 cout << event;
-                // stream_key key = make_tuple(stream_id.session_id, stream_id.channel_changes);
-                // streams[key].push_back({ts, event});   // allocate event TODO: put back and put back setempty!!!!
+                stream_key key = make_tuple(stream_id.session_id, stream_id.channel_changes);
+                streams[key].push_back({ts, event});   // allocate event 
             } 
 
             client_buffer_file.close();   
