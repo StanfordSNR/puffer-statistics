@@ -57,52 +57,6 @@ void split_on_char(const string_view str, const char ch_to_find, vector<string_v
     ret.emplace_back(str.substr(field_start));
 }
 
-uint64_t to_uint64(string_view str) {
-    uint64_t ret = -1;
-    const auto [ptr, ignore] = from_chars(str.data(), str.data() + str.size(), ret);
-    if (ptr != str.data() + str.size()) {
-        str.remove_prefix(ptr - str.data());
-        throw runtime_error("could not parse as integer: " + string(str));
-    }
-
-    return ret;
-}
-
-float to_float(const string_view str) {
-    /* sadly, g++ 8 doesn't seem to have floating-point C++17 from_chars() yet
-       float ret;
-       const auto [ptr, ignore] = from_chars(str.data(), str.data() + str.size(), ret);
-       if (ptr != str.data() + str.size()) {
-       throw runtime_error("could not parse as float: " + string(str));
-       }
-
-       return ret;
-       */
-
-    /* apologies for this */
-    char * const null_byte = const_cast<char *>(str.data() + str.size());
-    char old_value = *null_byte;
-    *null_byte = 0;
-
-    const float ret = atof(str.data());
-
-    *null_byte = old_value;
-
-    return ret;
-}
-
-template <typename T>
-T influx_integer(const string_view str) {
-    if (str.back() != 'i') {
-        throw runtime_error("invalid influx integer: " + string(str));
-    }
-    const uint64_t ret_64 = to_uint64(str.substr(0, str.size() - 1));
-    if (ret_64 > numeric_limits<T>::max()) {
-        throw runtime_error("can't convert to uint32_t: " + string(str));
-    }
-    return static_cast<T>(ret_64);
-}
-
 constexpr uint8_t SERVER_COUNT = 255;
 
 // server_id identifies a daemon serving a given scheme
@@ -120,319 +74,6 @@ uint64_t get_server_id(const vector<string_view> & fields) {
     }
 
     return server_id;
-}
-
-class string_table {
-    uint32_t next_id_ = 0;
-
-    dense_hash_map<string, uint32_t> forward_{};
-    dense_hash_map<uint32_t, string> reverse_{};
-
-    public:
-    string_table() {
-        forward_.set_empty_key({});
-        reverse_.set_empty_key(-1);
-    }
-
-    uint32_t forward_map_vivify(const string & name) {
-        auto ref = forward_.find(name);
-        if (ref == forward_.end()) {	
-            forward_[name] = next_id_;
-            reverse_[next_id_] = name;
-            next_id_++;
-            ref = forward_.find(name);
-        }
-        return ref->second;
-    }
-
-    uint32_t forward_map(const string & name) const {
-        auto ref = forward_.find(name);
-        if (ref == forward_.end()) {	
-            throw runtime_error( "username " + name + " not found");
-        }
-        return ref->second;
-    }
-
-    const string & reverse_map(const uint32_t id) const {
-        auto ref = reverse_.find(id);
-        if (ref == reverse_.end()) {
-            throw runtime_error( "uid " + to_string(id) + " not found");
-        }
-        return ref->second;
-    }
-};
-
-struct Event {
-    struct EventType {
-        enum class Type : uint8_t { init, startup, play, timer, rebuffer };
-        constexpr static array<string_view, 5> names = { "init", "startup", "play", "timer", "rebuffer" };
-
-        Type type;
-
-        operator string_view() const { return names[uint8_t(type)]; }
-
-        EventType(const string_view sv)
-            : type()
-        {
-            if (sv == "timer"sv) { type = Type::timer; }
-            else if (sv == "play"sv) { type = Type::play; }
-            else if (sv == "rebuffer"sv) { type = Type::rebuffer; }
-            else if (sv == "init"sv) { type = Type::init; }
-            else if (sv == "startup"sv) { type = Type::startup; }
-            else { throw runtime_error( "unknown event type: " + string(sv) ); }
-        }
-
-        operator uint8_t() const { return static_cast<uint8_t>(type); }
-
-        bool operator==(const EventType other) const { return type == other.type; }
-        bool operator==(const EventType::Type other) const { return type == other; }
-        bool operator!=(const EventType other) const { return not operator==(other); }
-        bool operator!=(const EventType::Type other) const { return not operator==(other); }
-    };
-
-    /* After 11/27, all measurements are recorded with both first_init_id (identifies session) 
-     * and init_id (identifies stream). Before 11/27, only init_id is recorded. */
-    optional<uint32_t> first_init_id{}; // optional
-    optional<uint32_t> init_id{};       // mandatory
-    optional<uint32_t> expt_id{};
-    optional<uint32_t> user_id{};
-    optional<EventType> type{};
-    optional<float> buffer{};
-    optional<float> cum_rebuf{};
-    optional<string> channel{};
-
-    bool bad = false;
-
-    // Event is "complete" and "good" if all mandatory fields are set exactly once
-    bool complete() const {
-        return init_id.has_value() and expt_id.has_value() and user_id.has_value()
-            and type.has_value() and buffer.has_value() and cum_rebuf.has_value()
-            and channel.has_value();
-    }
-
-    template <typename T>
-        void set_unique( optional<T> & field, const T & value ) {
-            if (not field.has_value()) { 
-                field.emplace(value);
-            } else {
-                if (field.value() != value) {
-                    if (not bad) {
-                        bad = true;
-                        cerr << "error trying to set contradictory event value: ";
-                        cerr << "old value: " << field.value() << " new value: " << value << "\n";
-                        cerr << *this;   
-                    }
-                    //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
-                }
-            }
-        }
-
-    /* Set field corresponding to key, if not yet set for this Event.
-     * If field is already set with a different value, Event is "bad" */
-    void insert_unique(const string_view key, const string_view value, string_table & usernames ) {
-        if (key == "first_init_id"sv) {
-            set_unique( first_init_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "init_id"sv) {
-            set_unique( init_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "expt_id"sv) {
-            set_unique( expt_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "user"sv) {
-            if (value.size() <= 2 or value.front() != '"' or value.back() != '"') {
-                throw runtime_error("invalid username string: " + string(value));
-            }
-            set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
-        } else if (key == "event"sv) {
-            set_unique( type, { value.substr(1,value.size()-2) } );
-        } else if (key == "buffer"sv) {
-            set_unique( buffer, to_float(value) );
-        } else if (key == "cum_rebuf"sv) {
-            set_unique( cum_rebuf, to_float(value) );
-        } else {
-            throw runtime_error( "unknown key: " + string(key) );
-        }
-    }
-        
-    friend std::ostream& operator<<(std::ostream& out, const Event& s); 
-};
-std::ostream& operator<< (std::ostream& out, const Event& s) {        
-    return out << "init_id=" << s.init_id.value_or(-1)
-    << ", expt_id=" << s.expt_id.value_or(-1)
-    << ", user_id=" << s.user_id.value_or(-1)
-    << ", type=" << (s.type.has_value() ? int(s.type.value()) : 'x')
-    << ", buffer=" << s.buffer.value_or(-1.0)
-    << ", cum_rebuf=" << s.cum_rebuf.value_or(-1.0)
-    << ", first_init_id=" << s.first_init_id.value_or(-1)
-    << ", channel=" << s.channel.value_or("None")
-    << "\n";
-}
-
-struct Sysinfo {
-    optional<uint32_t> browser_id{};
-    optional<uint32_t> expt_id{};
-    optional<uint32_t> user_id{};
-    optional<uint32_t> first_init_id{}; // optional
-    optional<uint32_t> init_id{};       // mandatory
-    optional<uint32_t> os{};
-    optional<uint32_t> ip{};
-
-    bool bad = false;
-
-    bool complete() const {
-        return browser_id and expt_id and user_id and init_id and os and ip;
-    }
-
-    bool operator==(const Sysinfo & other) const {
-        return browser_id == other.browser_id
-            and expt_id == other.expt_id
-            and user_id == other.user_id
-            and init_id == other.init_id
-            and os == other.os
-            and ip == other.ip
-            and first_init_id == other.first_init_id;
-    }
-
-    bool operator!=(const Sysinfo & other) const { return not operator==(other); }
-
-    template <typename T>
-        void set_unique( optional<T> & field, const T & value ) {
-            if (not field.has_value()) {
-                field.emplace(value);
-            } else {
-                if (field.value() != value) {
-                    if (not bad) {
-                        bad = true;
-                        cerr << "error trying to set contradictory sysinfo value: ";
-                        cerr << *this; 
-                    }
-                    //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
-                }
-            }
-        }
-
-    void insert_unique(const string_view key, const string_view value,
-            string_table & usernames,
-            string_table & browsers,
-            string_table & ostable ) {
-        if (key == "first_init_id"sv) {
-            set_unique( first_init_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "init_id"sv) {
-            set_unique( init_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "expt_id"sv) {
-            set_unique( expt_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "user"sv) {
-            if (value.size() <= 2 or value.front() != '"' or value.back() != '"') {
-                throw runtime_error("invalid username string: " + string(value));
-            }
-            set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
-        } else if (key == "browser"sv) {
-            set_unique( browser_id, browsers.forward_map_vivify(string(value.substr(1,value.size()-2))) );
-        } else if (key == "os"sv) {
-            string osname(value.substr(1,value.size()-2));
-            for (auto & x : osname) {
-                if ( x == ' ' ) { x = '_'; }
-            }
-            set_unique( os, ostable.forward_map_vivify(osname) );
-        } else if (key == "ip"sv) {
-            set_unique( ip, inet_addr(string(value.substr(1,value.size()-2)).c_str()) );
-        } else if (key == "screen_width"sv or key == "screen_height"sv) {
-            // ignore
-        } else {
-            throw runtime_error( "unknown key: " + string(key) );
-        }
-    }
-    friend std::ostream& operator<<(std::ostream& out, const Sysinfo& s); 
-};
-std::ostream& operator<< (std::ostream& out, const Sysinfo& s) {        
-    return out << "init_id=" << s.init_id.value_or(-1)
-    << ", expt_id=" << s.expt_id.value_or(-1)
-    << ", user_id=" << s.user_id.value_or(-1)
-    << ", browser_id=" << (s.browser_id.value_or(-1))
-    << ", os=" << s.os.value_or(-1.0)
-    << ", ip=" << s.ip.value_or(-1.0)
-    << ", first_init_id=" << s.first_init_id.value_or(-1)
-    << "\n";
-}
-
-struct VideoSent {
-    optional<float> ssim_index{};
-    optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, first_init_id{}, user_id{}, size{};
-    optional<string> channel{};
-
-    bool bad = false;
-
-    bool complete() const {
-        return ssim_index and delivery_rate and expt_id and init_id and user_id and size and channel;
-    }
-
-    bool operator==(const VideoSent & other) const {
-        return ssim_index == other.ssim_index
-            and delivery_rate == other.delivery_rate
-            and expt_id == other.expt_id
-            and init_id == other.init_id
-            and user_id == other.user_id
-            and size == other.size
-            and first_init_id == other.first_init_id
-            and channel == other.channel;
-    }
-
-    bool operator!=(const VideoSent & other) const { return not operator==(other); }
-
-    template <typename T>
-        void set_unique( optional<T> & field, const T & value ) {
-            if (not field.has_value()) {
-                field.emplace(value);
-            } else {
-                if (field.value() != value) {
-                    if (not bad) {
-                        bad = true;
-                        cerr << "error trying to set contradictory videosent value: ";
-                        cerr << *this; 
-                    }
-                    //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
-                }
-            }
-        }
-    
-    void insert_unique(const string_view key, const string_view value,
-            string_table & usernames ) {
-        if (key == "first_init_id"sv) {
-            set_unique( first_init_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "init_id"sv) {
-            set_unique( init_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "expt_id"sv) {
-            set_unique( expt_id, influx_integer<uint32_t>( value ) );
-        } else if (key == "user"sv) {
-            if (value.size() <= 2 or value.front() != '"' or value.back() != '"') {
-                throw runtime_error("invalid username string: " + string(value));
-            }
-            set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
-        } else if (key == "ssim_index"sv) {
-            set_unique( ssim_index, to_float(value) );
-        } else if (key == "delivery_rate"sv) {
-            set_unique( delivery_rate, influx_integer<uint32_t>( value ) );
-        } else if (key == "size"sv) {
-            set_unique( size, influx_integer<uint32_t>( value ) );
-        } else if (key == "buffer"sv or key == "cum_rebuffer"sv
-                or key == "cwnd"sv or key == "format"sv or key == "in_flight"sv
-                or key == "min_rtt"sv or key == "rtt"sv
-                or key == "video_ts"sv) {
-            // ignore
-        } else {
-            throw runtime_error( "unknown key: " + string(key) );
-        }
-    }
-    friend std::ostream& operator<<(std::ostream& out, const VideoSent& s); 
-};
-std::ostream& operator<< (std::ostream& out, const VideoSent& s) {        
-    return out << "init_id=" << s.init_id.value_or(-1)
-        << ", expt_id=" << s.expt_id.value_or(-1)
-        << ", user_id=" << s.user_id.value_or(-1)
-        << ", ssim_index=" << s.ssim_index.value_or(-1)
-        << ", delivery_rate=" << s.delivery_rate.value_or(-1)
-        << ", size=" << s.size.value_or(-1)
-        << ", first_init_id=" << s.first_init_id.value_or(-1)
-        << ", channel=" << s.channel.value_or("None")
-        << "\n";
 }
 
 string get_channel(const vector<string_view> & fields) {
@@ -456,7 +97,7 @@ typedef map<private_stream_id, public_stream_id>::iterator stream_ids_iterator;
 
 
 /* Whenever a timestamp is used to represent a day, round down to Influx backup hour.
- * Influx records ts as nanoseconds - use nanoseconds up until writing ts to csv. */
+ * Influx records ts as nanoseconds - use nanoseconds when writing ts to csv. */
 using Day_ns = uint64_t;
 /* I only want to type this once. */
 #define NS_PER_SEC 1000000000UL
@@ -685,7 +326,7 @@ class Parser {
 
         /* Called when stream is found corresponding to a session that hasn't yet been inserted to the map. */
         void record_new_session(const private_stream_id& private_id) {
-            /* generate session id in-place, record with channel_changes = 0 */
+            /* Generate session id in-place, record with channel_changes = 0 */
             pair<private_stream_id, public_stream_id> stream_id_mapping(private_id, public_stream_id{});
             pair<stream_ids_iterator, bool> new_public_id = stream_ids.insert(stream_id_mapping);
             int entropy_ret = getentropy(p_session_id(new_public_id.first), BYTES_OF_ENTROPY);
@@ -694,7 +335,7 @@ class Parser {
             }
             for (char & c : *p_session_id(new_public_id.first)) {
                 // TODO: hack to display special csv characters: comma, CR, LF, or double quote (RFC 4180)
-                if (c == ',' || c == 0xD || c == '\n' || c == '\"') {
+                if (c == ',' || c == '\r' || c == '\n' || c == '\"') {
                     c = 'a';
                 }
             }
@@ -768,13 +409,12 @@ class Parser {
             }   // end client_buffer loop
         }
 
-        // lines won't be ordered by ts across server_ids
-        void dump_anonymized_data(const string & date_str) {
-            // TODO: remove (test only)
+        void debug_print_stream_ids() {
             // check channels, session_id, channel changes
+            cerr << "Events and their IDs:" << endl;
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
                 for (const auto & [ts,event] : client_buffer[server]) {
-                    cerr << event;
+                    cerr << "\n" << event;
                     optional<uint32_t> first_init_id = event.first_init_id;
                     private_stream_id private_id = {first_init_id.value_or(*event.init_id), *event.user_id, *event.expt_id};
                     stream_ids_iterator found_stream_id = stream_ids.find(private_id);
@@ -782,10 +422,17 @@ class Parser {
 
                     public_stream_id public_id = found_stream_id->second;
                     cerr << "session ID " << public_id.session_id 
-                         << ", channel changes " << public_id.channel_changes << endl;
+                         << "\nchannel changes (always 0 if has first_init_id) " << public_id.channel_changes << endl;
                 }
             }
-            
+        }
+
+        // lines won't be ordered by ts across server_ids
+        void dump_anonymized_data(const string & date_str) {
+
+            // TODO: remove (test only)
+            debug_print_stream_ids();
+
             // CLIENT BUFFER
             // line format:
             // ts session_id channel_changes expt_id channel <event fields> 
@@ -799,6 +446,7 @@ class Parser {
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
                 for (const auto & [ts,event] : client_buffer[server]) {
                     // already threw for incomplete events when anonymizing
+                    // TODO: for videosent/acked/sysinfo, check bad/complete when dumping
                     if (event.bad) continue;
                     optional<uint32_t> first_init_id = event.first_init_id;
                     // Look up anonymous session/stream ID
@@ -818,7 +466,10 @@ class Parser {
                         channel_changes = *event.init_id - *first_init_id;
                     }
   
-                    client_buffer_file << ts << "," << public_id.session_id << "," << channel_changes
+                    client_buffer_file << ts << ",";
+                    // write session_id as raw bytes
+                    client_buffer_file.write(public_id.session_id, BYTES_OF_ENTROPY);
+                    client_buffer_file << "," << channel_changes
                                        << "," << *event.expt_id << "," << *event.channel << "," 
                                        << string_view(*event.type) << "," << *event.buffer << "," << *event.cum_rebuf << "\n";
                 }
