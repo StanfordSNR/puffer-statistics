@@ -3,6 +3,7 @@
 # Assumed to already be in desired output directory (e.g. called by parallel wrapper)
 set -e
 
+# For now, private and public in one script
 # Export and analyze a single day
 single_day_stats() { 
     first_day=$1
@@ -21,11 +22,22 @@ single_day_stats() {
     # export to influxDB line protocol file
     # pass top-level date to influx_inspect
     # echo "exporting and analyzing"
+    
+    # Influx export => anonymized csv 
+    # TODO: remove prints
+    echo "starting private analyze" 
     influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
-        ~/puffer-statistics/analyze ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_stats.txt 2> ${date}_err.txt 
+        ~/puffer-statistics/private_analyze $date 2> ${date}_private_analyze_err.txt 
+    
+    echo "finished private analyze"
+    # anonymized csv => stream-by-stream stats
+    cat client_buffer_${date}.csv | ~/puffer-statistics/public_analyze \
+        ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_public_analyze_stats.txt 2>${date}_public_analyze_err.txt
+    echo "finished public analyze"
     # clean up data, leave stats/err.txt
-    rm -rf ${date}
-    rm ${date}.tar.gz
+    # TODO: put back!
+    # rm -rf ${date} 
+    # rm ${date}.tar.gz
 }
 
 if [ "$#" -lt 1 ]; then

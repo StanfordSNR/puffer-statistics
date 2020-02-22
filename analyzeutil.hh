@@ -209,8 +209,8 @@ struct Event {
                     if (not bad) {
                         bad = true;
                         cerr << "error trying to set contradictory event value " << value <<
-                             "(old value " << field.value() << ")\n";
-                        cerr << "Contradictory event:\n";
+                                "( old value " << field.value() << ")\n";
+                        cerr << "Contradictory event with old value:\n";
                         cerr << *this;   
                     }
                     //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
@@ -442,7 +442,7 @@ struct TuplePrinter {
     static void print(const Tuple& t)
     {
         TuplePrinter<Tuple, N-1>::print(t);
-        std::cout << ", " << +std::get<N-1>(t);
+        std::cerr << ", " << +std::get<N-1>(t);
     }
 };
 
@@ -450,16 +450,16 @@ template<class Tuple>
 struct TuplePrinter<Tuple, 1> {
     static void print(const Tuple& t)
     {
-        std::cout << +std::get<0>(t);
+        std::cerr << +std::get<0>(t);
     }
 };
 
 template<class... Args>
 void print(const std::tuple<Args...>& t)
 {
-    std::cout << "(";
+    std::cerr << "(";
     TuplePrinter<decltype(t), sizeof...(Args)>::print(t);
-    std::cout << ")\n";
+    std::cerr << ")\n";
 }
 
 #endif

@@ -128,60 +128,20 @@ class Parser {
 
         stream_ids_table stream_ids{};
         
-        vector<string> experiments{};
-
         unsigned int bad_count = 0;
         /* Timestamp range to be analyzed (influx export includes corrupt data outside the requested range).
          * Any ts outside this range are rejected */
         pair<Day_ns, Day_ns> days{};
         size_t n_bad_ts = 0;
 
-        void read_experimental_settings_dump(const string & filename) {
-            ifstream experiment_dump{ filename };
-            if (not experiment_dump.is_open()) {
-                throw runtime_error( "can't open " + filename );
-            }
-
-            string line_storage;
-
-            while (true) {
-                getline(experiment_dump, line_storage);
-                if (not experiment_dump.good()) {
-                    break;
-                }
-
-                const string_view line{line_storage};
-
-                const size_t separator = line.find_first_of(' ');
-                if (separator == line.npos) {
-                    throw runtime_error("can't find separator: " + line_storage);
-                }
-                const uint64_t experiment_id = to_uint64(line.substr(0, separator));
-                if (experiment_id > numeric_limits<uint16_t>::max()) {
-                    throw runtime_error("invalid expt_id: " + line_storage);
-                }
-                const string_view rest_of_string = line.substr(separator+1);
-                Json::Reader reader;
-                Json::Value doc;
-                reader.parse(string(rest_of_string), doc);
-                experiments.resize(experiment_id + 1);
-                string name = doc["abr_name"].asString();
-                if (name.empty()) {
-                    name = doc["abr"].asString();
-                }
-                // populate experiments with expt_id => abr_name/cc or abr/cc
-                experiments.at(experiment_id) = name + "/" + doc["cc"].asString();
-            }
-        }
-
+        
     public:
-        Parser(const string & experiment_dump_filename, Day_ns start_ts)
+        Parser(Day_ns start_ts)
         {
             usernames.forward_map_vivify("unknown");
             browsers.forward_map_vivify("unknown");
             ostable.forward_map_vivify("unknown");
 
-            read_experimental_settings_dump(experiment_dump_filename);
             days.first = start_ts;
             days.second = start_ts + 60 * 60 * 24 * NS_PER_SEC;
         }
@@ -262,6 +222,8 @@ class Parser {
 
                         /* If timestamps within a server_id aren't unique, Event will become contradictory
                          * and we'll record it as "bad" later (hasn't happened in data thru 2/2/20). */
+                        // TODO: remove print
+                        // cerr << "setting " << key << ", ts " << timestamp << endl;
                         client_buffer[server_id][timestamp].insert_unique(key, value, usernames);
                         // set channel (not unique, since provided with every datapoint)
                         client_buffer[server_id][timestamp].channel = channel;  
@@ -315,6 +277,15 @@ class Parser {
                     throw;
                 }
             }
+            
+            // TODO: remove
+            // Count total events
+            // client_buffer[server] = map<ts, Event>
+            size_t n_total_events = 0;
+            for (uint8_t server = 0; server < client_buffer.size(); server++) {
+                n_total_events += client_buffer[server].size();
+            }
+            cerr << "n_total_events " << n_total_events << endl;
         }
 
         /* Called when stream is found corresponding to a session that hasn't yet been inserted to the map. */
@@ -361,7 +332,7 @@ class Parser {
                     // Check if this stream has already been recorded (via another Event in the stream)
                     stream_ids_iterator found_stream_id = stream_ids.find(private_id);
                     if (found_stream_id != stream_ids.end()) {
-                        cerr << "already recorded session/stream for event with ts " << to_string(ts) << endl; // TODO: remove
+                        // cerr << "already recorded session/stream for event with ts " << to_string(ts) << endl; // TODO: remove
                         continue; 
                     }
                     if (first_init_id) {
@@ -482,14 +453,16 @@ class Parser {
 
 };  // end Parser
 
-void private_analyze_main(const string & experiment_dump_filename, const string & date_str,
-                          Day_ns start_ts) {
-    Parser parser{ experiment_dump_filename, start_ts };
+void private_analyze_main(const string & date_str, Day_ns start_ts) {
+    Parser parser{ start_ts };
 
     parser.parse_stdin();
+    cout << date_str << endl;   // TODO: remove
+    /*
     parser.anonymize_stream_ids();
     // use date_str to name csv
     parser.dump_anonymized_data(date_str);
+    */
 }
 
 /* Parse date to Unix timestamp (nanoseconds) at Influx backup hour, 
@@ -517,18 +490,18 @@ int main(int argc, char *argv[]) {
             abort();
         }
 
-        if (argc != 3) {
-            cerr << "Usage: " << argv[0] << " expt_dump [from postgres] date [e.g. 2019-07-01T11_2019-07-02T11]\n";
+        if (argc != 2) {
+            cerr << "Usage: " << argv[0] << " date [e.g. 2019-07-01T11_2019-07-02T11]\n";
             return EXIT_FAILURE;
         }
 
-        optional<Day_ns> start_ts = parse_date(argv[2]); 
+        optional<Day_ns> start_ts = parse_date(argv[1]); 
         if (not start_ts) {
             cerr << "Date argument could not be parsed; format as 2019-07-01T11_2019-07-02T11\n";
             return EXIT_FAILURE;
         }
         
-        private_analyze_main(argv[1], argv[2], start_ts.value());
+        private_analyze_main(argv[1], start_ts.value());
     } catch (const exception & e) {
         cerr << e.what() << "\n";
         return EXIT_FAILURE;
