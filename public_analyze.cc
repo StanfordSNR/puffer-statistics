@@ -177,7 +177,7 @@ class Parser {
                 
                 // no need to fill in private fields
                 Event event{nullopt, nullopt, expt_id, nullopt, string_view(event_type_str), 
-                            buffer, cum_rebuf, channel};
+                            buffer, cum_rebuf};
                 /*
                 cerr << "ts " << ts << endl; 
                 cerr << "channel changes " << stream_id.index << endl;

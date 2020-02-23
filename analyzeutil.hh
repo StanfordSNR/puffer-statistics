@@ -195,15 +195,13 @@ struct Event {
     optional<EventType> type{};
     optional<float> buffer{};
     optional<float> cum_rebuf{};
-    optional<string> channel{};
 
     bool bad = false;
 
     // Event is "complete" and "good" if all mandatory fields are set exactly once
     bool complete() const {
         return init_id.has_value() and expt_id.has_value() and user_id.has_value()
-            and type.has_value() and buffer.has_value() and cum_rebuf.has_value()
-            and channel.has_value();
+            and type.has_value() and buffer.has_value() and cum_rebuf.has_value();
     }
 
     template <typename T>
@@ -215,7 +213,7 @@ struct Event {
                     if (not bad) {
                         bad = true;
                         cerr << "error trying to set contradictory event value " << value <<
-                                "( old value " << field.value() << ")\n";
+                                " (old value " << field.value() << ")\n";
                         cerr << "Contradictory event with old value:\n";
                         cerr << *this;   
                     }
@@ -260,7 +258,6 @@ std::ostream& operator<< (std::ostream& out, const Event& s) {
         << ", buffer=" << s.buffer.value_or(-1.0)
         << ", cum_rebuf=" << s.cum_rebuf.value_or(-1.0)
         << ", first_init_id=" << s.first_init_id.value_or(-1)
-        << ", channel=" << s.channel.value_or("None")
         << "\n";
 }
 
@@ -306,7 +303,7 @@ struct Sysinfo {
                     if (not bad) {
                         bad = true;
                         cerr << "error trying to set contradictory sysinfo value " << value <<
-                             "(old value " << field.value() << ")\n";
+                                " (old value " << field.value() << ")\n";
                         cerr << "Contradictory sysinfo:\n";
                         cerr << *this; 
                     }
@@ -363,12 +360,11 @@ std::ostream& operator<< (std::ostream& out, const Sysinfo& s) {
 struct VideoSent {
     optional<float> ssim_index{};
     optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, first_init_id{}, user_id{}, size{};
-    optional<string> channel{};
 
     bool bad = false;
 
     bool complete() const {
-        return ssim_index and delivery_rate and expt_id and init_id and user_id and size and channel;
+        return ssim_index and delivery_rate and expt_id and init_id and user_id and size; 
     }
 
     bool operator==(const VideoSent & other) const {
@@ -378,8 +374,7 @@ struct VideoSent {
             and init_id == other.init_id
             and user_id == other.user_id
             and size == other.size
-            and first_init_id == other.first_init_id
-            and channel == other.channel;
+            and first_init_id == other.first_init_id;
     }
 
     bool operator!=(const VideoSent & other) const { return not operator==(other); }
@@ -393,7 +388,7 @@ struct VideoSent {
                     if (not bad) {
                         bad = true;
                         cerr << "error trying to set contradictory videosent value " << value <<
-                             "(old value " << field.value() << ")\n";
+                                "(old value " << field.value() << ")\n";
                         cerr << "Contradictory videosent:\n";
                         cerr << *this; 
                     }
@@ -441,7 +436,6 @@ std::ostream& operator<< (std::ostream& out, const VideoSent& s) {
         << ", delivery_rate=" << s.delivery_rate.value_or(-1)
         << ", size=" << s.size.value_or(-1)
         << ", first_init_id=" << s.first_init_id.value_or(-1)
-        << ", channel=" << s.channel.value_or("None")
         << "\n";
 }
 
