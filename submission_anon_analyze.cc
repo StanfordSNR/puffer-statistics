@@ -752,6 +752,7 @@ class Parser {
                     }
                 }
             }
+            cerr << "n_total_streams " << sessions.size() << endl;  // TODO: remove all cerr/cout
         }
 
         /* Map each SysInfo to a stream or session (in the case of older data, when sysinfo was only supplied on load).
@@ -957,7 +958,8 @@ class Parser {
                 cout << fixed;
 
                 // ts from influx export include nanoseconds -- truncate to seconds
-                // cout all summary values
+                // cout all summary values for comparison against 
+                // public version that outputs client_buffer only
                 cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
                     << summary.scheme << " extent=" << summary.time_extent
                     << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
@@ -1173,12 +1175,10 @@ void analyze_main(const string & experiment_dump_filename, Day_ns start_ts) {
     Parser parser{ experiment_dump_filename, start_ts };
 
     parser.parse_stdin();
-    /*
     parser.accumulate_sessions();
     parser.accumulate_sysinfos();
     parser.accumulate_video_sents(); 
     parser.analyze_sessions();
-    */
 }
 
 /* Parse date to Unix timestamp (nanoseconds) at Influx backup hour, 

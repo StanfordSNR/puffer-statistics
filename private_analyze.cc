@@ -277,15 +277,6 @@ class Parser {
                     throw;
                 }
             }
-            
-            // TODO: remove
-            // Count total events
-            // client_buffer[server] = map<ts, Event>
-            size_t n_total_events = 0;
-            for (uint8_t server = 0; server < client_buffer.size(); server++) {
-                n_total_events += client_buffer[server].size();
-            }
-            cerr << "n_total_events " << n_total_events << endl;
         }
 
         /* Called when stream is found corresponding to a session that hasn't yet been inserted to the map. */
@@ -310,8 +301,6 @@ class Parser {
          * (public stream ID = {session ID, index}) */
         void anonymize_stream_ids() {
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
-                // const size_t rss = memcheck() / 1024;        // TODO: put back
-                // cerr << "server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
                 // iterates in increasing ts order
                 for (const auto & [ts,event] : client_buffer[server]) {
                     if (event.bad) {
@@ -441,7 +430,8 @@ class Parser {
                     client_buffer_file.write(public_id.session_id.data(), BYTES_OF_ENTROPY);
                     client_buffer_file << "," << index
                                        << "," << *event.expt_id << "," << *event.channel << "," 
-                                       << string_view(*event.type) << "," << *event.buffer << "," << *event.cum_rebuf << "\n";
+                                       << string_view(*event.type) << "," << *event.buffer << "," 
+                                       << *event.cum_rebuf << "\n";
                 }
             }
 
