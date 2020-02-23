@@ -34,7 +34,7 @@ using namespace std;
 using namespace std::literals;
 using google::sparse_hash_map;
 using google::dense_hash_map;
-// TODO: combine this file with other utils?
+// XXX: combine this file with other utils?
 
 constexpr static unsigned BYTES_OF_ENTROPY = 32;
 
@@ -45,10 +45,16 @@ using public_session_id = array<char, BYTES_OF_ENTROPY>;
 // ~uniquely and anonymously identifies a stream
 struct public_stream_id {
     public_session_id session_id{};
-    unsigned channel_changes{};
+    /* Index of stream in list of streams recorded for a session.
+     * This doesn't strictly represent channel changes, since a user could switch 
+     * channels without us getting an event. TODO: this serves my purpose, since only needs 
+     * to be unique across streams in a session. But, for stream with first_init_id,
+     * calculated as init_id - first_init_id (as opposed to always incrementing for 
+     * streams with no first_init_id). Cou*/
+    unsigned index{};
     bool operator==(const public_stream_id other) const { 
         return session_id == other.session_id and 
-            channel_changes == other.channel_changes; 
+            index == other.index; 
     }
 };
 
@@ -213,7 +219,8 @@ struct Event {
                         cerr << "Contradictory event with old value:\n";
                         cerr << *this;   
                     }
-                    //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+                    // TODO: remove
+                    throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
                 }
             }
         }
@@ -303,7 +310,8 @@ struct Sysinfo {
                         cerr << "Contradictory sysinfo:\n";
                         cerr << *this; 
                     }
-                    //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+                    // TODO: remove
+                    		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
                 }
             }
         }
@@ -389,7 +397,8 @@ struct VideoSent {
                         cerr << "Contradictory videosent:\n";
                         cerr << *this; 
                     }
-                    //		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+                    // TODO: remove
+                    		throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
                 }
             }
         }

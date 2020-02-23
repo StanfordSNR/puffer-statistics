@@ -60,7 +60,7 @@ class Parser {
 
         // streams[public_stream_id] = vec<[ts, Event]>
         using stream_key = tuple<public_session_id, unsigned>;   // unpack struct for hash
-        /*                                          channel_changes */
+        /*                                          index */
         dense_hash_map<stream_key, vector<pair<uint64_t, Event>>, boost::hash<stream_key>> streams;
 
         // sysinfos[sysinfo_key] = SysInfo
@@ -120,7 +120,7 @@ class Parser {
             : streams(), sysinfos(), chunks()
         {
             // TODO: check sysinfo/chunks empty keys
-            streams.set_empty_key( {{0}, -1U} );    // we never insert a stream with channel_changes -1
+            streams.set_empty_key( {{0}, -1U} );    // we never insert a stream with index -1
             sysinfos.set_empty_key({0,0,0});
             chunks.set_empty_key({{0},0});
 
@@ -152,16 +152,24 @@ class Parser {
             // ignore column labels
             getline(client_buffer_file, line_storage);
            
-            cerr << "\nParsed events:\n" << endl;
+            // cerr << "\nParsed events:\n" << endl;
             while (getline(client_buffer_file, line_storage)) {
-
                 istringstream line(line_storage);
-
-                // read ts
+                /*
+                if (not (line >> ts >> comma and comma == ',' and                
+                         // read stream id as raw bytes
+                         line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and
+                         line >> comma and comma == ',' and line >> stream_id.index >> comma and
+                         comma == ',' and line >> expt_id >> comma and comma == ',' and
+                         getline(line, channel, ',') and getline(line, event_type_str, ',') and
+                         line >> buffer >> comma and comma == ',' and line >> cum_rebuf ) ) {
+                    throw runtime_error("error reading from " + client_buffer_filename);
+                }
+                */
                 if (not (line >> ts >> comma and                
                          // read stream id as raw bytes
                          line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and
-                         line >> comma >> stream_id.channel_changes >> comma >> expt_id >> comma and 
+                         line >> comma >> stream_id.index >> comma >> expt_id >> comma and 
                          getline(line, channel, ',') and getline(line, event_type_str, ',') and
                          line >> buffer >> comma >> cum_rebuf ) ) {
                     throw runtime_error("error reading from " + client_buffer_filename);
@@ -170,19 +178,29 @@ class Parser {
                 // no need to fill in private fields
                 Event event{nullopt, nullopt, expt_id, nullopt, string_view(event_type_str), 
                             buffer, cum_rebuf, channel};
+                /*
                 cerr << "ts " << ts << endl; 
-                cerr << "channel changes " << stream_id.channel_changes << endl;
+                cerr << "channel changes " << stream_id.index << endl;
                 cerr << "session ID " << stream_id.session_id.data() << endl;
                 cerr << event;
-                stream_key key = make_tuple(stream_id.session_id, stream_id.channel_changes);
+                */
                 /* Add event to list of events corresponding to its stream */
-                streams[key].push_back({ts, event});   // allocates event 
+                streams[{stream_id.session_id, stream_id.index}].push_back({ts, event});   // allocates event 
             } 
 
             client_buffer_file.close();   
             if (client_buffer_file.bad()) {
                 throw runtime_error("error writing " + client_buffer_filename);
             }
+            
+            // TODO: remove
+            // Count total events, streams
+            size_t n_total_events = 0;
+            for ( auto & [unpacked_stream_id, events] : streams ) {
+                n_total_events += events.size();
+            }
+            cerr << "n_total_events " << n_total_events << endl;
+            cerr << "n_total_streams CHECK ME " << streams.size() << endl;
 
         }
        
@@ -226,7 +244,6 @@ class Parser {
                 cout << fixed;
 
                 // ts from influx export include nanoseconds -- truncate to seconds
-                // cerr all summary values
                 cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
                     << summary.scheme << " extent=" << summary.time_extent
                     << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"

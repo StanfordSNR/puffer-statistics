@@ -290,7 +290,7 @@ class Parser {
 
         /* Called when stream is found corresponding to a session that hasn't yet been inserted to the map. */
         void record_new_session(const private_stream_id& private_id) {
-            /* Generate session id in-place, record with channel_changes = 0 */
+            /* Generate session id in-place, record with index = 0 */
             pair<private_stream_id, public_stream_id> stream_id_mapping(private_id, public_stream_id{});
             pair<stream_ids_iterator, bool> insertion = stream_ids.insert(stream_id_mapping);
             public_stream_id& public_stream_id = insertion.first->second;
@@ -306,8 +306,8 @@ class Parser {
             }
         }
 
-        /* Assign cryptographically secure session ID to each stream, and record channel_changes
-         * (which serve as a public stream ID, in combination with session ID) */
+        /* Assign cryptographically secure session ID to each stream, and record index of stream in session
+         * (public stream ID = {session ID, index}) */
         void anonymize_stream_ids() {
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
                 // const size_t rss = memcheck() / 1024;        // TODO: put back
@@ -339,12 +339,11 @@ class Parser {
                         /* No need to decrement -- if stream has first_init_id, record with that */
                         /* Haven't recorded this session yet => generate session id and add to map */
                         record_new_session(private_id);
-                        // if already recorded, done (will calculate channel_changes on dump)
+                        // if already recorded, done (will calculate index on dump)
                     } else {
                         /* client_buffer *is* ordered by timestamp within server (and therefore within session), 
                          * so can decrement to find stream in stream_ids recorded thus far, since session
                          * will already have been recorded if this is not the first stream in the session */
-                        unsigned channel_changes = 0;
                         // already searched for exact match -- start with decrement = 1
                         for ( unsigned int decrement = 1; decrement < 1024; decrement++ ) {
                             found_stream_id = stream_ids.find({get<0>(private_id) - decrement,
@@ -353,7 +352,6 @@ class Parser {
                             if (found_stream_id == stream_ids.end()) {
                                 // loop again
                             } else {
-                                channel_changes = decrement;
                                 break;
                             }
                         }
@@ -361,15 +359,28 @@ class Parser {
                             /* This is the first stream in session -- generate session id and add to map */
                             record_new_session(private_id);
                         } else {
-                            /* Already recorded this session (but not this stream) => 
-                             * copy other stream's session id, record channel_changes, add to map */
+                            /* Already recorded this session (but not this stream) via the previous stream
+                             * in the session => copy previous stream's session id, increment stream index, add to map */
                             public_stream_id& found_public_id = found_stream_id->second;
-                            public_stream_id new_public_id{found_public_id.session_id, channel_changes};  
+                            public_stream_id new_public_id{found_public_id.session_id, found_public_id.index + 1};  
                             stream_ids[private_id] = new_public_id;
                         }
                     }    
                 }   // end client_buffer[server] loop 
-            }   // end client_buffer loop
+            }   // end client_buffer loop 
+        }
+
+        void check_public_stream_id_uniqueness() {
+            set<tuple<public_session_id, unsigned>> unique_public_stream_ids;
+            for (const auto & [private_id, public_stream_id] : stream_ids) {
+                bool duplicate = unique_public_stream_ids.count({public_stream_id.session_id, public_stream_id.index});
+                if (duplicate) {
+                    cerr << "duplicate session id: " << public_stream_id.session_id.data() << endl;
+                    cerr << "duplicate index: " << public_stream_id.index << endl;
+                    throw runtime_error("public stream IDs are not unique across all streams");
+                } 
+                unique_public_stream_ids.insert({public_stream_id.session_id, public_stream_id.index});
+            }
         }
 
         void debug_print_stream_ids() {
@@ -385,27 +396,23 @@ class Parser {
 
                     public_stream_id public_id = found_stream_id->second;
                     cerr << "session ID " << public_id.session_id.data()
-                         << "\nchannel changes (always 0 if has first_init_id) " << public_id.channel_changes << endl;
+                         << "\nindex (always 0 if has first_init_id) " << public_id.index << endl;
                 }
             }
         }
 
         // lines won't be ordered by ts across server_ids
         void dump_anonymized_data(const string & date_str) {
-
-            // TODO: remove (test only)
-            debug_print_stream_ids();
-
             // CLIENT BUFFER
             // line format:
-            // ts session_id channel_changes expt_id channel <event fields> 
+            // ts session_id index expt_id channel <event fields> 
             const string & client_buffer_filename = "client_buffer_" + date_str + ".csv";
             ofstream client_buffer_file;
             client_buffer_file.open(client_buffer_filename);
             if (not client_buffer_file.is_open()) {
                 throw runtime_error( "can't open " + client_buffer_filename);
             }
-            client_buffer_file << "time (ns GMT),session_id,channel_changes,expt_id,channel,event,buffer,cum_rebuf\n";
+            client_buffer_file << "time (ns GMT),session_id,index,expt_id,channel,event,buffer,cum_rebuf\n";
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
                 for (const auto & [ts,event] : client_buffer[server]) {
                     // already threw for incomplete events when anonymizing
@@ -422,17 +429,17 @@ class Parser {
                     }
                     
                     public_stream_id& public_id = found_stream_id->second;
-                    int channel_changes = public_id.channel_changes;
+                    int index = public_id.index;
                     if (first_init_id) {
                         // If event has first_init_id, its session only appears once in the map,
-                        // recorded with channel_changes = 0 => calculate channel_changes 
-                        channel_changes = *event.init_id - *first_init_id;
+                        // recorded with index = 0 => calculate index 
+                        index = *event.init_id - *first_init_id;
                     }
   
                     client_buffer_file << ts << ",";
                     // write session_id as raw bytes
                     client_buffer_file.write(public_id.session_id.data(), BYTES_OF_ENTROPY);
-                    client_buffer_file << "," << channel_changes
+                    client_buffer_file << "," << index
                                        << "," << *event.expt_id << "," << *event.channel << "," 
                                        << string_view(*event.type) << "," << *event.buffer << "," << *event.cum_rebuf << "\n";
                 }
@@ -445,10 +452,10 @@ class Parser {
         }
         // VIDEO SENT
         // line format:
-        // ts session_id channel_changes expt_id channel <videosent fields>
+        // ts session_id index expt_id channel <videosent fields>
         // VIDEO ACKED
         // line format:
-        // ts session_id channel_changes expt_id channel video_ts
+        // ts session_id index expt_id channel video_ts
         // TODO: also dump sysinfo
 
 };  // end Parser
@@ -457,12 +464,10 @@ void private_analyze_main(const string & date_str, Day_ns start_ts) {
     Parser parser{ start_ts };
 
     parser.parse_stdin();
-    cout << date_str << endl;   // TODO: remove
-    /*
     parser.anonymize_stream_ids();
+    parser.check_public_stream_id_uniqueness(); // TODO: remove
     // use date_str to name csv
     parser.dump_anonymized_data(date_str);
-    */
 }
 
 /* Parse date to Unix timestamp (nanoseconds) at Influx backup hour, 
