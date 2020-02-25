@@ -19,6 +19,7 @@ single_day_stats() {
     pushd ${date}
     for f in *.tar.gz; do tar xf "$f"; done
     popd
+    # influx_inspect export -datadir $date -waldir /dev/null -out "influx_out.txt" # useful for test
     # export to influxDB line protocol file
     # pass top-level date to influx_inspect
     # echo "exporting and analyzing"
@@ -40,9 +41,10 @@ single_day_stats() {
         ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_public_analyze_stats.txt \
         2> ${date}_public_analyze_err.txt
     #echo "finished public analyze"
-    # clean up data, leave stats/err.txt
+    # clean up data and csvs (TODO: test only!), leave stats/err.txt
     rm -rf ${date} 
     rm ${date}.tar.gz
+    rm client_buffer_${date}.csv
 
     # diff submission and new stats -- summary lines will be slightly different bc floats
     # sort, since public analyze outputs in different order
