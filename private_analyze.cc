@@ -57,7 +57,7 @@ void split_on_char(const string_view str, const char ch_to_find, vector<string_v
     ret.emplace_back(str.substr(field_start));
 }
 
-constexpr uint8_t SERVER_COUNT = 255;
+constexpr uint64_t SERVER_COUNT = 255;
 
 // server_id identifies a daemon serving a given scheme
 uint64_t get_server_id(const vector<string_view> & fields) {
@@ -76,27 +76,16 @@ uint64_t get_server_id(const vector<string_view> & fields) {
     return server_id;
 }
 
-string get_channel(const vector<string_view> & fields) {
-    for (const auto & field : fields) {
-        if (not field.compare(0, 8, "channel="sv)) {
-            return string(field.substr(8));
-        }
-    }
-
-    throw runtime_error("channel missing");
-}
-
 /* Two datapoints are considered part of the same event (i.e. same Event struct) iff they share 
  * {timestamp, server, channel}. 
  * Two events with the same ts may come to a given server, so use channel to help
  * disambiguate (see 2019-04-30:2019-05-01). 
- * But, don't index client_buffer by server or channel
- * (doesn't allow iterating over streams by timestamp order within
- * a session -- needed for anonymizing)  */
+ * XXX: Could change client_buffer back to nested array, now that 
+ * second pass is needed anyway. */
 struct event_key {
     uint64_t    timestamp{};
     uint64_t    server{};
-    string      channel{};
+    uint8_t     channel{};
     bool operator<(const event_key & o) const { 
         return (tie(timestamp, server, channel) < tie(o.timestamp, o.server, o.channel)); 
     }
@@ -105,31 +94,43 @@ struct event_key {
 using event_table = map<event_key, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
 
-// TODO: update this to match client_buffer
-using table_key = tuple<uint64_t, string>;
-using video_sent_table = map<table_key, VideoSent>;
+using video_sent_table = map<uint64_t, VideoSent>;
+/*                           timestamp */
 
-/* Two streams are considered part of the same session (i.e. same session_id) iff they share 
- * {decremented init_id, user_id}.
+/* Fully identifies a stream. */
+struct private_stream_key {
+    optional<uint32_t>  first_init_id;
+    uint32_t            init_id;
+    uint32_t            user_id;
+    uint32_t            expt_id;
+    uint64_t            server;
+    uint8_t             channel;
+};
+
+/* Identifies a group of streams that are part of the same session. 
+ * If init_id represents first_init_id, represents a session; else represents a group of streams
+ * with the same un-decremented init_id.
+ * Two streams are considered part of the same session (i.e. same session_id) iff they share 
+ * {decremented init_id/first_init_id, user_id}.
  * Watch_times script used for submission groups session by decremented init_id and IP --
  * this is the closest to that (using IP would mean that streams missing sysinfo
  * wouldn't be assigned a public session ID). */
-struct private_stream_id {
-    uint32_t    adjusted_init_id{};   // UN-decremented init_id, or first_init_id
+struct ambiguous_stream_id {
+    uint32_t    init_id{};   // UN-decremented init_id, or first_init_id
     uint32_t    user_id{};
-    bool operator<(const private_stream_id & o) const { 
-        return (tie(adjusted_init_id, user_id) < tie(o.adjusted_init_id, o.user_id)); 
+    bool operator<(const ambiguous_stream_id & o) const { 
+        return (tie(init_id, user_id) < tie(o.init_id, o.user_id)); 
     }
 };
 
 /* Two events are considered part of the same stream (i.e. same public_stream_id) iff they share 
- * {private_stream_id, expt_id, server, channel}.
+ * {ambiguous_stream_id, expt_id, server, channel}.
  * Server_id may change mid-session (see 2019-04-30:2019-05-01) - consider this a new stream
  * to match the submission. */
 struct stream_id_disambiguation {
     uint32_t    expt_id{};
     uint64_t    server{};
-    string      channel{};
+    uint8_t     channel{};
     bool operator==(const stream_id_disambiguation & o) const { 
         return (tie(expt_id, server, channel) == tie(o.expt_id, o.server, o.channel));
     }
@@ -145,8 +146,8 @@ struct public_stream_ids_list {
      * will contain an element for each server_id. */
     vector<stream_index> streams{};
 };
-using stream_ids_table = map<private_stream_id, public_stream_ids_list>;
-typedef map<private_stream_id, public_stream_ids_list>::iterator stream_ids_iterator;
+using stream_ids_table = map<ambiguous_stream_id, public_stream_ids_list>;
+typedef map<ambiguous_stream_id, public_stream_ids_list>::iterator stream_ids_iterator;
 
 
 /* Whenever a timestamp is used to represent a day, round down to Influx backup hour.
@@ -167,7 +168,26 @@ class Parser {
         string_table usernames{};
         string_table browsers{};
         string_table ostable{};
+        string_table formats{};
+        
+        /* Assign each channel an index, to allow indexing by channel and
+         * avoid hard-coding channels */
+        string_table channels{};
+        /* Get index corresponding to channel. */
+        uint8_t get_channel_id(const vector<string_view> & fields) {
+            string channel_str; 
+            for (const auto & field : fields) {
+                if (not field.compare(0, 8, "channel="sv)) {
+                    channel_str = string(field.substr(8));
+                }
+            }
 
+            if (channel_str.empty()) {
+                throw runtime_error("channel missing");
+            }
+            // Insert new channel if needed
+            return channels.forward_map_vivify(channel_str);
+        }
         // client_buffer = map<[ts, server, channel], Event>
         // See event_key comment
         event_table client_buffer{};
@@ -175,8 +195,8 @@ class Parser {
         // client_sysinfo[server] = map<ts, SysInfo>
         array<sysinfo_table, SERVER_COUNT> client_sysinfo{};
         
-        // video_sent[server] = map<[ts, channel], VideoSent>
-        array<video_sent_table, SERVER_COUNT> video_sent{}; 
+        // video_sent[server][channel] = map<ts, VideoSent>
+        array<vector<video_sent_table>, SERVER_COUNT> video_sent{}; 
 
         stream_ids_table stream_ids{};
         
@@ -190,9 +210,12 @@ class Parser {
     public:
         Parser(Day_ns start_ts)
         {
+            // XXX: why are these necessary?
             usernames.forward_map_vivify("unknown");
             browsers.forward_map_vivify("unknown");
             ostable.forward_map_vivify("unknown");
+            formats.forward_map_vivify("unknown");
+            channels.forward_map_vivify("unknown");
 
             days.first = start_ts;
             days.second = start_ts + 60 * 60 * 24 * NS_PER_SEC;
@@ -269,15 +292,13 @@ class Parser {
                     if ( measurement == "client_buffer"sv ) {
                         // Set this line's field (e.g. cum_rebuf) in the Event corresponding to this 
                         // server, channel, and ts 
-                        const auto server_id = get_server_id(measurement_tag_set_fields);
-                        const auto channel = get_channel(measurement_tag_set_fields);
+                        const uint64_t server_id = get_server_id(measurement_tag_set_fields);
+                        const uint8_t channel_id = get_channel_id(measurement_tag_set_fields);
 
                         /* If two events share a {timestamp, server_id, channel}, 
                          * Event will become contradictory and we'll record it as "bad" later
-                         * (occurs during study period, e.g. 2019-07-02). */
-                        // TODO: remove print
-                        // cerr << "setting " << key << ", ts " << timestamp << endl;
-                        client_buffer[{timestamp, server_id, channel}].insert_unique(key, value, usernames);
+                         * (bad events do occur during study period, e.g. 2019-07-02). */
+                        client_buffer[{timestamp, server_id, channel_id}].insert_unique(key, value, usernames);
                     } else if ( measurement == "active_streams"sv ) {
                         // skip
                     } else if ( measurement == "backlog"sv ) {
@@ -313,12 +334,16 @@ class Parser {
                     } else if ( measurement == "video_sent"sv ) {
                         // Set this line's field (e.g. ssim_index) in the VideoSent corresponding to this 
                         // server, channel, and ts
-                        // TODO: if this works for client_buffer, use for videoSent too (change type of video_sent,
                         // remove channel from struct)
-                        const auto server_id = get_server_id(measurement_tag_set_fields);
-                        const auto channel = get_channel(measurement_tag_set_fields);
-                        video_sent[server_id][{timestamp, channel}].insert_unique(key, value, usernames);
-                        // TODO: record other fields for dump
+                        const uint64_t server_id = get_server_id(measurement_tag_set_fields);
+                        const uint8_t channel_id = get_channel_id(measurement_tag_set_fields);
+                        const unsigned n_cur_channels = video_sent[server_id].size();
+                        // Insert channel to vector if needed
+                        int n_new_channels = channel_id + 1 - n_cur_channels;
+                        if (n_new_channels > 0) {
+                            video_sent[server_id].resize(n_cur_channels + n_new_channels);
+                        }
+                        video_sent[server_id].at(channel_id)[timestamp].insert_unique(key, value, usernames, formats);
                     } else if ( measurement == "video_size"sv ) {
                         // skip
                     } else {
@@ -344,24 +369,25 @@ class Parser {
             }
         }
 
-        /* Assign cryptographically secure session ID to each stream, and record index of stream in session.
-         * Session ID and index are outputted in csv; public analyze uses them as a stream ID */
-        void anonymize_stream_ids() {
-            // 1. Record streams with blank session ID/stream index
+        /* Group client_buffer by user_id, and first_init_id if available, else un-decremented init_id.
+         * After grouping, each element of stream_ids represents 
+         * a stream if no first_init_id, else a session.
+         * Record with blank session ID/stream index; will be filled in after grouping. */
+        void group_stream_ids() {
             for (const auto & [event_info, event] : client_buffer) {
-                //cerr << "cur event_info: " << event_info.timestamp << " " << event_info.server << event_info.channel << endl;
                 if (event.bad) {
                     bad_count++;
                     cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
                     continue;
                 }
                 if (not event.complete()) {
+                    cerr << event << endl;
                     throw runtime_error("incomplete event with timestamp " + to_string(event_info.timestamp));
                 }
 
                 optional<uint32_t> first_init_id = event.first_init_id;
                 // Record with first_init_id, if available
-                private_stream_id private_id = 
+                ambiguous_stream_id private_id = 
                     {first_init_id.value_or(*event.init_id), *event.user_id};
                 stream_id_disambiguation disambiguation = {*event.expt_id, event_info.server, event_info.channel};
                 stream_ids_iterator found_ambiguous_stream = stream_ids.find(private_id);
@@ -377,24 +403,10 @@ class Parser {
                         // Haven't recorded this {expt_id, server, channel} for this {init_id, user_id} yet =>
                         // add an entry for this {expt_id, server, channel} (regardless of first_init_id)
                         found_streams.emplace_back(stream_index{disambiguation, -1});
-                        //if (*event.init_id == 3977886231 || *event.init_id == 3977886232) {
-                        /*
-                            cerr << "inserted new disambiguous stream with init ID " 
-                                 << private_id.adjusted_init_id << ", user " << private_id.user_id 
-                                 << " ts " << event_info.timestamp << endl;
-                            cerr << event << endl;
-                            */
-                        //}
-                    } /*else {
+                    } else {
                         // Already recorded this {expt_id, server, channel} for this {init_id, user_id} =>
                         // nothing to do
-                        // TODO: remove
-                        if (*event.init_id == 3977886231 || *event.init_id == 3977886232) {
-                            cerr << "disambiguous stream already recorded for this event" 
-                                 << " ts " << event_info.timestamp << endl;
-                            cerr << event << endl;
-                        } 
-                    } */
+                    }
                 } else if (found_ambiguous_stream == stream_ids.end()) {
                     // This stream's {init_id, user_id} has not yet been recorded => add an entry in the stream_ids
                     // with blank session ID and stream indexes (will be filled in in pass over stream_ids) 
@@ -405,19 +417,22 @@ class Parser {
                         new_stream_ids_list.streams.emplace_back(stream_index{disambiguation, -1});
                     }
                     stream_ids.emplace(make_pair(private_id, new_stream_ids_list));
-                    /*
-                    cerr << "inserted new {init_id, user_id} with init ID " 
-                         << private_id.adjusted_init_id << ", user " << private_id.user_id 
-                         << " ts " << event_info.timestamp << endl;
-                    */
                 }
             }
+        }
 
-            /* Pass over stream IDs; all init_ids are recorded, so it's safe to decrement.
-             * This pass is required because two events may have the same timestamp, but
-             * a different init_id (e.g. see 2019-03-31, init_ids 3977886231/3977886232)
-             * So, there's no order in which we can iterate over client_buffer and be certain we'll
-             * come across the init_ids within a session in increasing order. */
+        /* Assign cryptographically secure session ID to each stream, and record index of stream in session.
+         * Session ID and index are outputted in csv; public analyze uses them as a stream ID. 
+         * Build stream_ids using client_buffer events. 
+         * When dumping data, search stream_ids for stream key corresponding to each datapoint 
+         * (either video_sent, video_acked, or client_buffer TODO: or sysinfo?) */
+        void anonymize_stream_ids() {
+            /* Pass over stream IDs; all init_ids are recorded, so it's safe to decrement to search
+             * for previous streams in the session.
+             * This pass is required because sometimes two events have the same timestamp and user, but
+             * the second one has a lower init_id (e.g. see 2019-03-31, init_ids 3977886231/3977886232)
+             * So, there's no obvious way to build client_buffer such that init_ids within a session 
+             * are sorted. */
             for (auto & [cur_private_id, cur_public_ids_list] : stream_ids) {
                 bool is_first_init_id = cur_public_ids_list.streams.empty();
                 if (is_first_init_id) { 
@@ -432,7 +447,7 @@ class Parser {
                     unsigned decrement;
                     for ( decrement = 1; decrement < 1024; decrement++ ) {
                         found_ambiguous_stream = stream_ids.find({
-                                cur_private_id.adjusted_init_id - decrement, cur_private_id.user_id});
+                                cur_private_id.init_id - decrement, cur_private_id.user_id});
                         if (found_ambiguous_stream == stream_ids.end()) {
                             // loop again
                         } else {
@@ -440,14 +455,11 @@ class Parser {
                         }
                     }
 
-                    int start_stream_index = 0;
+                    unsigned start_stream_index = 0;
 
                     if (found_ambiguous_stream == stream_ids.end()) {
                         /* This is the first stream in session -- generate session id,
                          * fill in stream indexes starting from 0. */
-                        if (cur_private_id.adjusted_init_id == 3977886231 || cur_private_id.adjusted_init_id == 3977886232) {
-                            cerr << "recording first stream in session for init_id " << cur_private_id.adjusted_init_id << endl;
-                        }
                         generate_session_id(cur_public_ids_list);
                     } else {
                         /* Already recorded this session via the previous ambiguous stream
@@ -456,10 +468,6 @@ class Parser {
                         public_stream_ids_list& found_public_ids = found_ambiguous_stream->second;
                         cur_public_ids_list.session_id = found_public_ids.session_id;
                         start_stream_index = found_public_ids.streams.back().index + 1;
-                        if (cur_private_id.adjusted_init_id == 3977886231 || cur_private_id.adjusted_init_id == 3977886232) {
-                            cerr << "copied ambiguous stream with init_id " << cur_private_id.adjusted_init_id - decrement
-                                 << "; will fill in indexes starting with " << start_stream_index << endl; 
-                        }
                     }
                     // Fill in stream indexes , if no first_init_id
                     for (auto & disambiguous_stream : cur_public_ids_list.streams) {
@@ -467,16 +475,12 @@ class Parser {
                     }
                 }   // end else 
             }   // end stream_ids loop
-
-            // TODO: remove
-            unsigned n_disambiguous_streams = 0;
-            for (const auto & [private_id, public_ids_list] : stream_ids) {
-                n_disambiguous_streams += public_ids_list.streams.size();
-            }
-            cerr << "n_disambiguous_streams in anonymize(): " << n_disambiguous_streams << endl;
         }
 
-        void check_public_stream_id_uniqueness() {
+        /* Useful for testing. Check that no two streams are assigned the same
+         * {session_id, stream index} */
+        void check_public_stream_id_uniqueness() const {
+            cerr << "stream_ids: " << endl;
             set<tuple<public_session_id, unsigned>> unique_public_stream_ids;
             for (const auto & [private_id, public_ids_list] : stream_ids) {
                 for (const auto & disambiguous_stream : public_ids_list.streams) {
@@ -484,7 +488,7 @@ class Parser {
                             {public_ids_list.session_id, disambiguous_stream.index});
                     if (duplicate) {
                         cerr << "duplicate public ID:" << endl;
-                        cerr << "adjusted init id: " << private_id.adjusted_init_id << endl;
+                        cerr << "duplicate init id: " << private_id.init_id << endl;
                         cerr << "duplicate index: " << disambiguous_stream.index << endl;
                         throw runtime_error("public stream IDs are not unique across all streams");
                     } 
@@ -493,63 +497,70 @@ class Parser {
             }
         }
 
+        /* Given private stream id, return public session ID and stream index */
+        const public_stream_id get_anonymous_ids(const private_stream_key & stream_key) {
+            optional<uint32_t> first_init_id = stream_key.first_init_id;
+            // Look up anonymous session/stream ID
+            ambiguous_stream_id private_id = 
+                {first_init_id.value_or(stream_key.init_id), stream_key.user_id};
+            const stream_id_disambiguation disambiguation = 
+                {stream_key.expt_id, stream_key.server, stream_key.channel};
+            const stream_ids_iterator found_ambiguous_stream = stream_ids.find(private_id);
+            if (found_ambiguous_stream == stream_ids.end()) {
+                // This shouldn't happen -- all stream_keys should have IDs by now
+                throw runtime_error( "Failed to find anonymized session/stream ID for init_id " 
+                                      + to_string(stream_key.init_id) + ", user " + to_string(stream_key.user_id) 
+                                      + " (ambiguous stream ID not found)" );
+            }
+            
+            unsigned index;
+            public_stream_ids_list& found_public_ids = found_ambiguous_stream->second;
+           
+            if (first_init_id) {
+                // If private_stream_key has first_init_id, its session only appears once in stream_ids,
+                // calculate index 
+                index = stream_key.init_id - *first_init_id;
+            } else {
+                vector<stream_index> & found_streams = found_public_ids.streams;
+                auto found_disambiguous_stream = find_if(found_streams.begin(), found_streams.end(),
+                     [&disambiguation] (const stream_index& s) { return s.disambiguation == disambiguation; });
+                if (found_disambiguous_stream == found_streams.end()) {
+                    // This shouldn't happen -- all private_stream_keys should have IDs by now
+                    throw runtime_error( "Failed to find anonymized session/stream ID for init_id " 
+                                          + to_string(stream_key.init_id) 
+                                          + " (ambiguous stream ID not found)" );
+                }
+                index = found_disambiguous_stream->index;
+            }
+
+            // XXX: is array copy elided?
+            return {found_public_ids.session_id, index};
+        }
         /* 
          * Write csv, including session ID from stream_ids.
          * For events without first_init_id, stream index was also recorded in stream_ids.
          * For events with first_init_id, stream index is calculated as init_id - first_init_id.
          */
-        void dump_anonymized_data(const string & date_str) {
-            // CLIENT BUFFER
+        void dump_anonymized_client_buffer(const string & date_str) {
             // line format:
             // ts session_id index expt_id channel <event fields> 
             const string & client_buffer_filename = "client_buffer_" + date_str + ".csv";
-            ofstream client_buffer_file;
-            client_buffer_file.open(client_buffer_filename);
+            ofstream client_buffer_file{client_buffer_filename};
             if (not client_buffer_file.is_open()) {
                 throw runtime_error( "can't open " + client_buffer_filename);
             }
             client_buffer_file << "time (ns GMT),session_id,index,expt_id,channel,event,buffer,cum_rebuf\n";
             for (const auto & [event_info, event] : client_buffer) {
-                // already threw for incomplete events when anonymizing
+                // already printed bad event info and threw for incomplete events when anonymizing
                 // TODO: for videosent/acked/sysinfo, check bad/complete when dumping
                 if (event.bad) continue;
-                optional<uint32_t> first_init_id = event.first_init_id;
-                // Look up anonymous session/stream ID
-                private_stream_id private_id = 
-                    {first_init_id.value_or(*event.init_id), *event.user_id};
-                const stream_id_disambiguation disambiguation = 
-                    {*event.expt_id, event_info.server, event_info.channel};
-                stream_ids_iterator found_ambiguous_stream = stream_ids.find(private_id);
-                if (found_ambiguous_stream == stream_ids.end()) {
-                    // This shouldn't happen -- all events should have IDs by now
-                    throw runtime_error( "Failed to find anonymized session/stream ID for event with init_id " 
-                                          + to_string(*event.init_id) + " (ambiguous stream ID not found)" );
-                }
-                
-                int index;
-                public_stream_ids_list& found_public_ids = found_ambiguous_stream->second;
-               
-                if (first_init_id) {
-                    // If event has first_init_id, its session only appears once in stream_ids,
-                    // calculate index 
-                    index = *event.init_id - *first_init_id;
-                } else {
-                    vector<stream_index> & found_streams = found_public_ids.streams;
-                    auto found_disambiguous_stream = find_if(found_streams.begin(), found_streams.end(),
-                         [&disambiguation] (const stream_index& s) { return s.disambiguation == disambiguation; });
-                    if (found_disambiguous_stream == found_streams.end()) {
-                        // This shouldn't happen -- all events should have IDs by now
-                        throw runtime_error( "Failed to find anonymized session/stream ID for event with init_id " 
-                                              + to_string(*event.init_id) + " (disambiguous stream ID not found)" );
-                    }
-                    index = found_disambiguous_stream->index;
-                }
-
+                public_stream_id public_id = get_anonymous_ids({event.first_init_id, *event.init_id,
+                        *event.user_id, *event.expt_id, event_info.server, event_info.channel});
                 client_buffer_file << event_info.timestamp << ",";
                 // write session_id as raw bytes
-                client_buffer_file.write(found_public_ids.session_id.data(), BYTES_OF_ENTROPY);
-                client_buffer_file << "," << index
-                                   << "," << *event.expt_id << "," << event_info.channel << "," 
+                client_buffer_file.write(public_id.session_id.data(), BYTES_OF_ENTROPY);
+                client_buffer_file << "," << public_id.index
+                                   << "," << *event.expt_id << "," << channels.reverse_map(event_info.channel) << "," 
                                    << string_view(*event.type) << "," << *event.buffer << "," 
                                    << *event.cum_rebuf << "\n";
             }
@@ -559,9 +570,53 @@ class Parser {
                 throw runtime_error("error writing " + client_buffer_filename);
             }
         }
-        // VIDEO SENT
-        // line format:
-        // ts session_id index expt_id channel <videosent fields>
+
+        void dump_anonymized_video_sent(const string & date_str) {
+            // line format:
+            // ts session_id index expt_id channel <videosent fields>
+            const string & video_sent_filename = "video_sent_" + date_str + ".csv";
+            ofstream video_sent_file{video_sent_filename};
+            if (not video_sent_file.is_open()) {
+                throw runtime_error( "can't open " + video_sent_filename);
+            }
+            video_sent_file << "time (ns GMT),session_id,index,expt_id,channel,"
+                               "video_ts,format,size,ssim_index,cwnd,in_flight,min_rtt,rtt,delivery_rate\n";
+            for (uint64_t server = 0; server < video_sent.size(); server++) {
+                for (uint8_t channel = 0; channel < video_sent[server].size(); channel++) {
+                    const string & channel_str = channels.reverse_map(channel);
+                    for (const auto & [ts,videosent] : video_sent[server][channel]) {
+                        if (videosent.bad) {
+                            bad_count++;
+                            cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
+                            continue;
+                        }
+                        if (not videosent.complete()) {
+                            cerr << videosent << endl;
+                            throw runtime_error("incomplete videosent with timestamp " + to_string(ts));
+                        }
+
+                        const string & format_str = formats.reverse_map(*videosent.format);
+                        public_stream_id public_id = get_anonymous_ids({videosent.first_init_id, *videosent.init_id,
+                                *videosent.user_id, *videosent.expt_id, server, channel});
+                        video_sent_file << ts << ",";
+                        // write session_id as raw bytes
+                        video_sent_file.write(public_id.session_id.data(), BYTES_OF_ENTROPY);
+                        video_sent_file << "," << public_id.index
+                                           << "," << *videosent.expt_id << "," << channel_str << "," 
+                                           << *videosent.video_ts << "," << format_str << ","
+                                           << *videosent.size << "," << *videosent.ssim_index << ","
+                                           << *videosent.cwnd << "," << *videosent.in_flight << ","
+                                           << *videosent.min_rtt << "," << *videosent.rtt << ","
+                                           << *videosent.delivery_rate << "\n";
+                    }
+                }
+            }
+
+            video_sent_file.close();   
+            if (video_sent_file.bad()) {
+                throw runtime_error("error writing " + video_sent_filename);
+            }
+        }
         // VIDEO ACKED
         // line format:
         // ts session_id index expt_id channel video_ts
@@ -573,12 +628,11 @@ void private_analyze_main(const string & date_str, Day_ns start_ts) {
     Parser parser{ start_ts };
 
     parser.parse_stdin();
+    parser.group_stream_ids();
     parser.anonymize_stream_ids();
-    cerr << date_str << endl;   // TODO: remove
-    // TODO: put back
-    parser.check_public_stream_id_uniqueness(); // TODO: remove
     // use date_str to name csv
-    parser.dump_anonymized_data(date_str);
+    parser.dump_anonymized_client_buffer(date_str); 
+    parser.dump_anonymized_video_sent(date_str);
 }
 
 /* Parse date to Unix timestamp (nanoseconds) at Influx backup hour, 

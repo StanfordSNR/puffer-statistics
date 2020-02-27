@@ -38,9 +38,8 @@ using google::dense_hash_map;
 constexpr static unsigned BYTES_OF_ENTROPY = 32;
 
 // 32-byte cryptographically secure random ID
-// Has to be std::array to be in tuple, and must be in tuple for hashmap
-// (make struct tho to name fields)
 using public_session_id = array<char, BYTES_OF_ENTROPY>;
+
 // ~uniquely and anonymously identifies a stream
 struct public_stream_id {
     public_session_id session_id{};
@@ -112,7 +111,8 @@ T influx_integer(const string_view str) {
     }
     const uint64_t ret_64 = to_uint64(str.substr(0, str.size() - 1));
     if (ret_64 > numeric_limits<T>::max()) {
-        throw runtime_error("can't convert to uint32_t: " + string(str));
+        throw runtime_error("influx integer " + string(str) + " exceeds max value " + 
+                            to_string(numeric_limits<T>::max()));
     }
     return static_cast<T>(ret_64);
 }
@@ -129,21 +129,23 @@ class string_table {
         reverse_.set_empty_key(-1);
     }
 
-    uint32_t forward_map_vivify(const string & name) {
-        auto ref = forward_.find(name);
+    /* Return map[key], inserting if necessary. */
+    uint32_t forward_map_vivify(const string & key) {
+        auto ref = forward_.find(key);
         if (ref == forward_.end()) {	
-            forward_[name] = next_id_;
-            reverse_[next_id_] = name;
+            forward_[key] = next_id_;
+            reverse_[next_id_] = key;
             next_id_++;
-            ref = forward_.find(name);
+            ref = forward_.find(key);
         }
         return ref->second;
     }
 
-    uint32_t forward_map(const string & name) const {
-        auto ref = forward_.find(name);
+    /* Return map.at(key), throwing if not found. */
+    uint32_t forward_map(const string & key) const {
+        auto ref = forward_.find(key);
         if (ref == forward_.end()) {	
-            throw runtime_error( "username " + name + " not found");
+            throw runtime_error( "key " + key + " not found");
         }
         return ref->second;
     }
@@ -151,7 +153,7 @@ class string_table {
     const string & reverse_map(const uint32_t id) const {
         auto ref = reverse_.find(id);
         if (ref == reverse_.end()) {
-            throw runtime_error( "uid " + to_string(id) + " not found");
+            throw runtime_error( "id " + to_string(id) + " not found");
         }
         return ref->second;
     }
@@ -271,12 +273,11 @@ struct Sysinfo {
     optional<uint32_t> init_id{};       // mandatory
     optional<uint32_t> os{};
     optional<uint32_t> ip{};
-    optional<string>   channel{};
 
     bool bad = false;
 
     bool complete() const {
-        return browser_id and expt_id and user_id and init_id and os and ip and channel;
+        return browser_id and expt_id and user_id and init_id and os and ip;
     }
 
     bool operator==(const Sysinfo & other) const {
@@ -286,8 +287,7 @@ struct Sysinfo {
             and init_id == other.init_id
             and os == other.os
             and ip == other.ip
-            and first_init_id == other.first_init_id
-            and channel == other.channel;
+            and first_init_id == other.first_init_id;
     }
 
     bool operator!=(const Sysinfo & other) const { return not operator==(other); }
@@ -325,6 +325,7 @@ struct Sysinfo {
             }
             set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
         } else if (key == "browser"sv) {
+            // Insert browser to string => id map; store id
             set_unique( browser_id, browsers.forward_map_vivify(string(value.substr(1,value.size()-2))) );
         } else if (key == "os"sv) {
             string osname(value.substr(1,value.size()-2));
@@ -350,18 +351,21 @@ std::ostream& operator<< (std::ostream& out, const Sysinfo& s) {
         << ", os=" << s.os.value_or(-1.0)
         << ", ip=" << s.ip.value_or(-1.0)
         << ", first_init_id=" << s.first_init_id.value_or(-1)
-        << ", channel=" << s.channel.value_or("None")
         << "\n";
 }
 
 struct VideoSent {
+    // types taken from convert_tag_to_field.py
     optional<float> ssim_index{};
-    optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, first_init_id{}, user_id{}, size{};
+    optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, first_init_id{}, user_id{}, size{},
+    format{}, cwnd{}, in_flight{}, min_rtt{}, rtt{};
+    optional<uint64_t> video_ts{};
 
     bool bad = false;
 
     bool complete() const {
-        return ssim_index and delivery_rate and expt_id and init_id and user_id and size; 
+        return ssim_index and delivery_rate and expt_id and init_id and user_id and size and
+               video_ts and cwnd and in_flight and min_rtt and rtt and format;
     }
 
     bool operator==(const VideoSent & other) const {
@@ -371,7 +375,13 @@ struct VideoSent {
             and init_id == other.init_id
             and user_id == other.user_id
             and size == other.size
-            and first_init_id == other.first_init_id;
+            and first_init_id == other.first_init_id
+            and video_ts == other.video_ts
+            and cwnd == other.cwnd
+            and in_flight == other.in_flight
+            and min_rtt == other.min_rtt
+            and rtt == other.rtt
+            and format == other.format;
     }
 
     bool operator!=(const VideoSent & other) const { return not operator==(other); }
@@ -395,7 +405,7 @@ struct VideoSent {
         }
 
     void insert_unique(const string_view key, const string_view value,
-            string_table & usernames ) {
+            string_table & usernames, string_table & formats) {
         if (key == "first_init_id"sv) {
             set_unique( first_init_id, influx_integer<uint32_t>( value ) );
         } else if (key == "init_id"sv) {
@@ -413,10 +423,19 @@ struct VideoSent {
             set_unique( delivery_rate, influx_integer<uint32_t>( value ) );
         } else if (key == "size"sv) {
             set_unique( size, influx_integer<uint32_t>( value ) );
-        } else if (key == "buffer"sv or key == "cum_rebuffer"sv
-                or key == "cwnd"sv or key == "format"sv or key == "in_flight"sv
-                or key == "min_rtt"sv or key == "rtt"sv
-                or key == "video_ts"sv) {
+        } else if (key == "video_ts"sv) {
+            set_unique( video_ts, influx_integer<uint64_t>( value ) );
+        } else if (key == "cwnd"sv) {
+            set_unique( cwnd, influx_integer<uint32_t>( value ) );
+        } else if (key == "in_flight"sv) {
+            set_unique( in_flight, influx_integer<uint32_t>( value ) );
+        } else if (key == "min_rtt"sv) {
+            set_unique( min_rtt, influx_integer<uint32_t>( value ) );
+        } else if (key == "rtt"sv) {
+            set_unique( rtt, influx_integer<uint32_t>( value ) );
+        } else if (key == "format"sv) {
+            set_unique( format, formats.forward_map_vivify(string(value.substr(1,value.size()-2))) );
+        } else if (key == "buffer"sv or key == "cum_rebuffer"sv) {
             // ignore
         } else {
             throw runtime_error( "unknown key: " + string(key) );
@@ -432,6 +451,12 @@ std::ostream& operator<< (std::ostream& out, const VideoSent& s) {
         << ", delivery_rate=" << s.delivery_rate.value_or(-1)
         << ", size=" << s.size.value_or(-1)
         << ", first_init_id=" << s.first_init_id.value_or(-1)
+        << ", video_ts=" << s.video_ts.value_or(-1)
+        << ", cwnd=" << s.cwnd.value_or(-1)
+        << ", in_flight=" << s.in_flight.value_or(-1)
+        << ", min_rtt=" << s.min_rtt.value_or(-1)
+        << ", rtt=" << s.rtt.value_or(-1)
+        << ", format=" << s.format.value_or(-1)
         << "\n";
 }
 
