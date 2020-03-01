@@ -716,9 +716,8 @@ class Parser {
                     throw;
                 }
             }
-            // TODO: remove
             // Count total events
-            // client_buffer[server][channel] = map<ts, Event>
+            /*
             size_t n_total_events = 0;
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
                 for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
@@ -726,7 +725,7 @@ class Parser {
                 }
             }
             cerr << "n_total_events " << n_total_events << endl;
-
+            */
         }
 
         /* Group Events by stream (key is {init_id, expt_id, user_id, server, channel}) 
@@ -752,7 +751,7 @@ class Parser {
                     }
                 }
             }
-            cerr << "n_total_streams " << sessions.size() << endl;  // TODO: remove all cerr/cout
+            // cerr << "n_total_streams " << sessions.size() << endl;  
         }
 
         /* Map each SysInfo to a stream or session (in the case of older data, when sysinfo was only supplied on load).

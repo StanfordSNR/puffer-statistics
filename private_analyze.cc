@@ -28,10 +28,12 @@ using google::sparse_hash_map;
 using google::dense_hash_map;
 
 /** 
- * From stdin, parses influxDB export, which contains one line per key/value datapoint 
- * collected at a given timestamp. Keys correspond to fields in Event, SysInfo, or VideoSent.
- * To stdout, outputs summary of each stream (one stream per line).
- * Takes date as arguments.
+ * From stdin, parses influxDB export, which contains one line per key/value "measurement"
+ * (e.g. cum_rebuf) collected with a given timestamp, server, and channel. 
+ * For each measurement type in {client_buffer, video_sent, video_acked},
+ * outputs a csv containing one line per "datapoint" (i.e. all measurements collected 
+ * with a given timestamp, server, and channel).
+ * Takes date as argument.
  */
 
 // if delimiter is at end, adds empty string to ret
@@ -77,19 +79,8 @@ uint64_t get_server_id(const vector<string_view> & fields) {
 /* Two datapoints are considered part of the same event (i.e. same Event struct) iff they share 
  * {timestamp, server, channel}. 
  * Two events with the same ts may come to a given server, so use channel to help
- * disambiguate (see 2019-04-30:2019-05-01). 
- * XXX: Could change client_buffer back to nested array, now that 
- * second pass is needed anyway. */
-struct event_key {
-    uint64_t    timestamp{};
-    uint64_t    server{};
-    uint8_t     channel{};
-    bool operator<(const event_key & o) const { 
-        return (tie(timestamp, server, channel) < tie(o.timestamp, o.server, o.channel)); 
-    }
-};
-
-using event_table = map<event_key, Event>;
+ * disambiguate (see 2019-04-30:2019-05-01). */
+using event_table = map<uint64_t, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
 
 using video_sent_table = map<uint64_t, VideoSent>;
@@ -97,7 +88,7 @@ using video_sent_table = map<uint64_t, VideoSent>;
 using video_acked_table = map<uint64_t, VideoAcked>;
 /*                            timestamp */
 
-/* Fully identifies a stream. */
+/* Fully identifies a stream, for convenience. */
 struct private_stream_key {
     optional<uint32_t>  first_init_id;
     uint32_t            init_id;
@@ -108,7 +99,7 @@ struct private_stream_key {
 };
 
 /* Identifies a group of streams that are part of the same session. 
- * If init_id represents first_init_id, represents a session; else represents a group of streams
+ * If init_id is a first_init_id, represents a session; else represents a group of streams
  * with the same un-decremented init_id.
  * Two streams are considered part of the same session (i.e. same session_id) iff they share 
  * {decremented init_id/first_init_id, user_id}.
@@ -144,12 +135,15 @@ struct stream_index {
     int                      index{};  
 };
 
+/* Session ID and list of *disambiguous* streams corresponding to a 
+ * given *ambiguous* stream ID. */
 struct public_stream_ids_list {
     public_session_id session_id{}; // random number (nullopt if not filled in yet)
     /* This vector usually has one element, but if the server_id changes mid-session,
      * will contain an element for each server_id. */
     vector<stream_index> streams{};
 };
+
 using stream_ids_table = map<ambiguous_stream_id, public_stream_ids_list>;
 typedef map<ambiguous_stream_id, public_stream_ids_list>::iterator stream_ids_iterator;
 
@@ -157,8 +151,6 @@ typedef map<ambiguous_stream_id, public_stream_ids_list>::iterator stream_ids_it
 /* Whenever a timestamp is used to represent a day, round down to Influx backup hour.
  * Influx records ts as nanoseconds - use nanoseconds when writing ts to csv. */
 using Day_ns = uint64_t;
-/* I only want to type this once. */
-#define NS_PER_SEC 1000000000UL
 class Parser {
     private:
         string_table usernames{};
@@ -184,9 +176,9 @@ class Parser {
             // Insert new channel if needed
             return channels.forward_map_vivify(channel_str);
         }
-        // client_buffer = map<[ts, server, channel], Event>
-        // See event_key comment
-        event_table client_buffer{};
+        
+        // client_buffer[server][channel] = map<ts, Event>
+        array<vector<event_table>, SERVER_COUNT> client_buffer{}; 
         
         // client_sysinfo[server] = map<ts, SysInfo>
         array<sysinfo_table, SERVER_COUNT> client_sysinfo{};
@@ -219,11 +211,29 @@ class Parser {
             days.second = start_ts + 60 * 60 * 24 * NS_PER_SEC;
         }
 
-        /* Parse lines of influxDB export, for lines measuring client_buffer, client_sysinfo, or video_sent.
-         * Each such line contains one field in an Event, SysInfo, or VideoSent (respectively)
-         * corresponding to a certain server, channel (for Event/VideoSent only), and timestamp.
-         * Store that field in the appropriate Event, SysInfo, or VideoSent (which may already
-         * be partially populated by other lines) in client_buffer, client_sysinfo, or video_sent. 
+        // Get server and channel ID for a measurement, resizing vector if needed to insert
+        // the channel. 
+        template<typename Array>
+        pair<uint64_t, uint8_t> get_server_channel(Array & arr, vector<string_view> & measurement_tag_set_fields) {
+            const uint64_t server_id = get_server_id(measurement_tag_set_fields);
+            const uint8_t channel_id = get_channel_id(measurement_tag_set_fields);
+
+            const unsigned n_cur_channels = arr[server_id].size();
+            // Insert channel to vector if needed
+            int n_new_channels = channel_id + 1 - n_cur_channels;
+            if (n_new_channels > 0) {
+                 arr[server_id].resize(n_cur_channels + n_new_channels);
+            }
+            return {server_id, channel_id};
+        }
+
+        /* Parse lines of influxDB export, for lines measuring 
+         * client_buffer, client_sysinfo, video_sent, or video_acked.
+         * Each such line contains one field in an Event, SysInfo, VideoSent, or VideoAcked (respectively)
+         * corresponding to a certain server, channel (unless SysInfo), and timestamp.
+         * Store that field in the appropriate Event, SysInfo, VideoSent, or VideoAcked (which may already
+         * be partially populated by other lines) in client_buffer, client_sysinfo, video_sent, or video_acked
+         * data structures. 
          * Ignore data points out of the date range. */
         void parse_stdin() {
             ios::sync_with_stdio(false);
@@ -287,15 +297,14 @@ class Parser {
 
                 try {
                     if ( measurement == "client_buffer"sv ) {
-                        // Set this line's field (e.g. cum_rebuf) in the Event corresponding to this 
-                        // server, channel, and ts 
-                        const uint64_t server_id = get_server_id(measurement_tag_set_fields);
-                        const uint8_t channel_id = get_channel_id(measurement_tag_set_fields);
-
-                        /* If two events share a {timestamp, server_id, channel}, 
+                        /* Set this line's field in the Event/VideoSent/VideoAcked corresponding to this 
+                         * server, channel, and ts. 
+                         * If two events share a {timestamp, server_id, channel}, 
                          * Event will become contradictory and we'll record it as "bad" later
-                         * (bad events do occur during study period, e.g. 2019-07-02). */
-                        client_buffer[{timestamp, server_id, channel_id}].insert_unique(key, value, usernames);
+                         * (bad events do occur during study period, e.g. 2019-07-02) */
+                        const auto & [server_id, channel_id] = 
+                            get_server_channel(client_buffer, measurement_tag_set_fields);
+                        client_buffer[server_id].at(channel_id)[timestamp].insert_unique(key, value, usernames);
                     } else if ( measurement == "active_streams"sv ) {
                         // skip
                     } else if ( measurement == "backlog"sv ) {
@@ -326,28 +335,12 @@ class Parser {
                     } else if ( measurement == "ssim"sv ) {
                         // skip
                     } else if ( measurement == "video_acked"sv ) {
-                        // Set this line's field (e.g. video_ts) in the VideoAcked corresponding to this 
-                        // server, channel, and ts
-                        const uint64_t server_id = get_server_id(measurement_tag_set_fields);
-                        const uint8_t channel_id = get_channel_id(measurement_tag_set_fields);
-                        const unsigned n_cur_channels = video_acked[server_id].size();
-                        // Insert channel to vector if needed
-                        int n_new_channels = channel_id + 1 - n_cur_channels;
-                        if (n_new_channels > 0) {
-                            video_acked[server_id].resize(n_cur_channels + n_new_channels);
-                        }
+                        const auto & [server_id, channel_id] = 
+                            get_server_channel(video_acked, measurement_tag_set_fields);
                         video_acked[server_id].at(channel_id)[timestamp].insert_unique(key, value, usernames);
                     } else if ( measurement == "video_sent"sv ) {
-                        // Set this line's field (e.g. ssim_index) in the VideoSent corresponding to this 
-                        // server, channel, and ts
-                        const uint64_t server_id = get_server_id(measurement_tag_set_fields);
-                        const uint8_t channel_id = get_channel_id(measurement_tag_set_fields);
-                        const unsigned n_cur_channels = video_sent[server_id].size();
-                        // Insert channel to vector if needed
-                        int n_new_channels = channel_id + 1 - n_cur_channels;
-                        if (n_new_channels > 0) {
-                            video_sent[server_id].resize(n_cur_channels + n_new_channels);
-                        }
+                        const auto & [server_id, channel_id] = 
+                            get_server_channel(video_sent, measurement_tag_set_fields);
                         video_sent[server_id].at(channel_id)[timestamp].insert_unique(key, value, usernames, formats);
                     } else if ( measurement == "video_size"sv ) {
                         // skip
@@ -361,15 +354,19 @@ class Parser {
             }
         }
 
+        /* Generate random session ID in place. */
         void generate_session_id(public_stream_ids_list & public_ids_list) {
             int entropy_ret = getentropy(public_ids_list.session_id.data(), BYTES_OF_ENTROPY);
             if (entropy_ret != 0) {
                 throw runtime_error(string("Failed to generate public session ID: ") + strerror(errno));
             }
             for (char & c : public_ids_list.session_id) {
-                // TODO: hack to display special csv characters: comma, CR, LF, or double quote (RFC 4180)
-                if (c == ',' || c == '\r' || c == '\n' || c == '\"') {
-                    c = 'a';
+                // XXX: hack to display special csv characters: comma, CR, LF, or double quote (RFC 4180)
+                switch (c) {
+                    case ',' : c = 'a'; break;
+                    case '\r': c = 'b'; break;
+                    case '\n': c = 'c'; break;
+                    case '\"': c = 'd'; break;
                 }
             }
         }
@@ -381,56 +378,63 @@ class Parser {
          * Record with blank session ID/stream index; will be filled in after grouping. */
         void group_stream_ids() {
             unsigned line_no = 0;
-            for (const auto & [event_info, event] : client_buffer) {
-                if (line_no % 1000000 == 0) {
-                    const size_t rss = memcheck() / 1024;
-                    cerr << "line " << line_no++ / 1000000 << "M, RSS=" << rss << " MiB\n"; 
-                }
-                if (event.bad) {
-                    bad_count++;
-                    cerr << "Skipping bad data point (of " << bad_count << " total) with contradictory values.\n";
-                    continue;
-                }
-                if (not event.complete()) {
-                    cerr << event << endl;
-                    throw runtime_error("incomplete event with timestamp " + to_string(event_info.timestamp));
-                }
+            for (uint8_t server = 0; server < client_buffer.size(); server++) {
+                for (uint8_t channel = 0; channel < client_buffer[server].size(); channel++) {
+                    for (const auto & [ts,event] : client_buffer[server][channel]) {
+                        if (line_no % 1000000 == 0) {
+                            const size_t rss = memcheck() / 1024;
+                            cerr << "line " << line_no++ / 1000000 << "M, RSS=" << rss << " MiB\n"; 
+                        }
+                        if (event.bad) {
+                            bad_count++;
+                            cerr << "Skipping bad data point (of " << bad_count 
+                                 << " total) with contradictory values.\n";
+                            continue;
+                        }
+                        if (not event.complete()) {
+                            cerr << event << endl;
+                            throw runtime_error("incomplete event with timestamp " 
+                                                + to_string(ts));
+                        }
 
-                optional<uint32_t> first_init_id = event.first_init_id;
-                // Record with first_init_id, if available
-                ambiguous_stream_id private_id = 
-                    {first_init_id.value_or(*event.init_id), *event.user_id};
-                stream_id_disambiguation disambiguation = {*event.expt_id, event_info.server, event_info.channel};
-                stream_ids_iterator found_ambiguous_stream = stream_ids.find(private_id);
-                if (found_ambiguous_stream != stream_ids.end() and not first_init_id) {
-                    // This stream's {init_id, user_id} has already been recorded => 
-                    // add {expt_id, server, channel} if not yet recorded 
-                    // (if stream has first_init_id, leave vector empty)
-                    vector<stream_index> & found_streams = found_ambiguous_stream->second.streams;
-                    auto found_disambiguous_stream = find_if(found_streams.begin(), found_streams.end(),
-                         [&disambiguation] (const stream_index& s) { 
-                            return s.disambiguation == disambiguation; 
-                    });
+                        optional<uint32_t> first_init_id = event.first_init_id;
+                        // Record with first_init_id, if available
+                        ambiguous_stream_id private_id = 
+                            {first_init_id.value_or(*event.init_id), *event.user_id};
+                        stream_id_disambiguation disambiguation = 
+                            {*event.expt_id, server, channel};
+                        stream_ids_iterator found_ambiguous_stream = stream_ids.find(private_id);
+                        if (found_ambiguous_stream != stream_ids.end() and not first_init_id) {
+                            // This stream's {init_id, user_id} has already been recorded => 
+                            // add {expt_id, server, channel} if not yet recorded 
+                            // (if stream has first_init_id, leave vector empty)
+                            vector<stream_index> & found_streams = found_ambiguous_stream->second.streams;
+                            auto found_disambiguous_stream = find_if(found_streams.begin(), found_streams.end(),
+                                 [&disambiguation] (const stream_index& s) { 
+                                    return s.disambiguation == disambiguation; 
+                            });
 
-                    if (found_disambiguous_stream == found_streams.end()) {
-                        // Haven't recorded this {expt_id, server, channel} for this {init_id, user_id} yet =>
-                        // add an entry for this {expt_id, server, channel} (regardless of first_init_id)
-                        found_streams.emplace_back(stream_index{disambiguation, -1});
-                    } else {
-                        // Already recorded this {expt_id, server, channel} for this {init_id, user_id} =>
-                        // nothing to do
+                            if (found_disambiguous_stream == found_streams.end()) {
+                                // Haven't recorded this {expt_id, server, channel} for this {init_id, user_id} yet =>
+                                // add an entry for this {expt_id, server, channel} (regardless of first_init_id)
+                                found_streams.emplace_back(stream_index{disambiguation, -1});
+                            } else {
+                                // Already recorded this {expt_id, server, channel} for this {init_id, user_id} =>
+                                // nothing to do
+                            }
+                        } else if (found_ambiguous_stream == stream_ids.end()) {
+                            // This stream's {init_id, user_id} has not yet been recorded => 
+                            // add an entry in stream_ids
+                            // with blank session ID and stream indexes (will be filled in in pass over stream_ids) 
+                            // (regardless of first_init_id)
+                            /* Generate session id in-place, record with index = -1 */
+                            public_stream_ids_list new_stream_ids_list{};
+                            if (not first_init_id) {
+                                new_stream_ids_list.streams.emplace_back(stream_index{disambiguation, -1});
+                            }
+                            stream_ids.emplace(make_pair(private_id, new_stream_ids_list));
+                        }
                     }
-                } else if (found_ambiguous_stream == stream_ids.end()) {
-                    // This stream's {init_id, user_id} has not yet been recorded => 
-                    // add an entry in stream_ids
-                    // with blank session ID and stream indexes (will be filled in in pass over stream_ids) 
-                    // (regardless of first_init_id)
-                    /* Generate session id in-place, record with index = -1 */
-                    public_stream_ids_list new_stream_ids_list{};
-                    if (not first_init_id) {
-                        new_stream_ids_list.streams.emplace_back(stream_index{disambiguation, -1});
-                    }
-                    stream_ids.emplace(make_pair(private_id, new_stream_ids_list));
                 }
             }
         }
@@ -438,15 +442,14 @@ class Parser {
         /* Assign cryptographically secure session ID to each stream, and record index of stream in session.
          * Session ID and index are outputted in csv; public analyze uses them as a stream ID. 
          * Build stream_ids using client_buffer events. 
-         * When dumping data, search stream_ids for stream key corresponding to each datapoint 
-         * (either video_sent, video_acked, or client_buffer) */
+         * When dumping data, search stream_ids for stream key corresponding to each datapoint */
         void anonymize_stream_ids() {
             /* Pass over stream IDs; all init_ids are recorded, so it's safe to decrement to search
              * for previous streams in the session.
              * This pass is required because sometimes two events have the same timestamp and user, but
              * the second one has a lower init_id (e.g. see 2019-03-31, init_ids 3977886231/3977886232)
              * So, there's no obvious way to build client_buffer such that init_ids within a session 
-             * are sorted (sorting by ts, server, and channel is not enough). */
+             * are sorted -- sorting by ts, server, and channel is not enough. */
             for (auto & [cur_private_id, cur_public_ids_list] : stream_ids) {
                 bool is_first_init_id = cur_public_ids_list.streams.empty();
                 if (is_first_init_id) { 
@@ -494,7 +497,6 @@ class Parser {
         /* Useful for testing. Check that no two streams are assigned the same
          * {session_id, stream index} */
         void check_public_stream_id_uniqueness() const {
-            cerr << "stream_ids: " << endl;
             set<tuple<public_session_id, unsigned>> unique_public_stream_ids;
             for (const auto & [private_id, public_ids_list] : stream_ids) {
                 for (const auto & disambiguous_stream : public_ids_list.streams) {
@@ -512,7 +514,7 @@ class Parser {
         }
 
         /* Given private stream id, return public session ID and stream index */
-        const public_stream_id get_anonymous_ids(const private_stream_key & stream_key) {
+        const pair<public_session_id &, unsigned> get_anonymous_ids(const private_stream_key & stream_key) {
             optional<uint32_t> first_init_id = stream_key.first_init_id;
             // Look up anonymous session/stream ID
             ambiguous_stream_id private_id = 
@@ -547,7 +549,7 @@ class Parser {
                 index = found_disambiguous_stream->index;
             }
 
-            // XXX: is array copy elided?
+            // Return session_id by reference to avoid copy
             return {found_public_ids.session_id, index};
         }
         /* 
@@ -564,18 +566,22 @@ class Parser {
                 throw runtime_error( "can't open " + client_buffer_filename);
             }
             client_buffer_file << "time (ns GMT),session_id,index,expt_id,channel,event,buffer,cum_rebuf\n";
-            for (const auto & [event_info, event] : client_buffer) {
-                // already printed bad event info and threw for incomplete events when anonymizing
-                if (event.bad) continue;
-                public_stream_id public_id = get_anonymous_ids({event.first_init_id, *event.init_id,
-                        *event.user_id, *event.expt_id, event_info.server, event_info.channel});
-                client_buffer_file << event_info.timestamp << ",";
-                // write session_id as raw bytes
-                client_buffer_file.write(public_id.session_id.data(), BYTES_OF_ENTROPY);
-                client_buffer_file << "," << public_id.index
-                                   << "," << *event.expt_id << "," << channels.reverse_map(event_info.channel) << "," 
-                                   << string_view(*event.type) << "," << *event.buffer << "," 
-                                   << *event.cum_rebuf << "\n";
+            for (uint8_t server = 0; server < client_buffer.size(); server++) {
+                for (uint8_t channel = 0; channel < client_buffer[server].size(); channel++) {
+                    for (const auto & [ts,event] : client_buffer[server][channel]) {
+                        // already printed bad event info and threw for incomplete events when anonymizing
+                        if (event.bad) continue;
+                        const auto & [session_id, index] = get_anonymous_ids({event.first_init_id, *event.init_id,
+                                *event.user_id, *event.expt_id, server, channel});
+                        client_buffer_file << ts << ",";
+                        // write session_id as raw bytes
+                        client_buffer_file.write(session_id.data(), BYTES_OF_ENTROPY);
+                        client_buffer_file << "," << index
+                                           << "," << *event.expt_id << "," << channels.reverse_map(channel) 
+                                           << "," << string_view(*event.type) << "," << *event.buffer << "," 
+                                           << *event.cum_rebuf << "\n";
+                    }
+                }
             }
 
             client_buffer_file.close();   
@@ -596,7 +602,6 @@ class Parser {
                                "video_ts,format,size,ssim_index,cwnd,in_flight,min_rtt,rtt,delivery_rate\n";
             for (uint64_t server = 0; server < video_sent.size(); server++) {
                 for (uint8_t channel = 0; channel < video_sent[server].size(); channel++) {
-                    const string & channel_str = channels.reverse_map(channel);
                     for (const auto & [ts,video_sent] : video_sent[server][channel]) {
                         if (video_sent.bad) {
                             bad_count++;
@@ -609,13 +614,14 @@ class Parser {
                         }
 
                         const string & format_str = formats.reverse_map(*video_sent.format);
-                        public_stream_id public_id = get_anonymous_ids({video_sent.first_init_id, *video_sent.init_id,
+                        const auto & [session_id, index] = 
+                            get_anonymous_ids({video_sent.first_init_id, *video_sent.init_id,
                                 *video_sent.user_id, *video_sent.expt_id, server, channel});
                         video_sent_file << ts << ",";
                         // write session_id as raw bytes
-                        video_sent_file.write(public_id.session_id.data(), BYTES_OF_ENTROPY);
-                        video_sent_file << "," << public_id.index
-                                        << "," << *video_sent.expt_id << "," << channel_str << "," 
+                        video_sent_file.write(session_id.data(), BYTES_OF_ENTROPY);
+                        video_sent_file << "," << index
+                                        << "," << *video_sent.expt_id << "," << channels.reverse_map(channel) << "," 
                                         << *video_sent.video_ts << "," << format_str << ","
                                         << *video_sent.size << "," << *video_sent.ssim_index << ","
                                         << *video_sent.cwnd << "," << *video_sent.in_flight << ","
@@ -642,7 +648,6 @@ class Parser {
             video_acked_file << "time (ns GMT),session_id,index,expt_id,channel,video_ts\n";
             for (uint64_t server = 0; server < video_acked.size(); server++) {
                 for (uint8_t channel = 0; channel < video_acked[server].size(); channel++) {
-                    const string & channel_str = channels.reverse_map(channel);
                     for (const auto & [ts,video_acked] : video_acked[server][channel]) {
                         if (video_acked.bad) {
                             bad_count++;
@@ -656,14 +661,15 @@ class Parser {
 
                         // TODO: format of video_ts? Looks different than regular ts format, but 
                         // same in video_acked and video_sent
-                        public_stream_id public_id = get_anonymous_ids({video_acked.first_init_id, *video_acked.init_id,
+                        const auto & [session_id, index] = 
+                            get_anonymous_ids({video_acked.first_init_id, *video_acked.init_id,
                                 *video_acked.user_id, *video_acked.expt_id, server, channel});
                         video_acked_file << ts << ",";
                         // write session_id as raw bytes
-                        video_acked_file.write(public_id.session_id.data(), BYTES_OF_ENTROPY);
-                        video_acked_file << "," << public_id.index
-                                         << "," << *video_acked.expt_id << "," << channel_str << "," 
-                                         << *video_acked.video_ts << "\n";
+                        video_acked_file.write(session_id.data(), BYTES_OF_ENTROPY);
+                        video_acked_file << "," << index
+                                         << "," << *video_acked.expt_id << "," << channels.reverse_map(channel) 
+                                         << "," << *video_acked.video_ts << "\n";
                     }
                 }
             }
@@ -691,8 +697,6 @@ void private_analyze_main(const string & date_str, Day_ns start_ts) {
 /* Parse date to Unix timestamp (nanoseconds) at Influx backup hour, 
  * e.g. 2019-11-28T11_2019-11-29T11 => 1574938800000000000 (for 11AM UTC backup) */
 optional<Day_ns> parse_date(const string & date) {
-    // TODO: this definitely works in the configuration used for paper submission (on 96-core VM),
-    // but gives local time, not 11am GMT, in VirtualBox without fast cxxflags. Investigate portability.
     const auto T_pos = date.find('T');
     const string & start_day = date.substr(0, T_pos);
 
@@ -702,7 +706,16 @@ optional<Day_ns> parse_date(const string & date) {
     if (not strptime(strptime_str.str().c_str(), "%Y-%m-%d %H:%M:%S", &day_fields)) {
         return nullopt;
     }
+
+    // set timezone to UTC for mktime
+    char* tz = getenv("TZ");
+    setenv("TZ", "UTC", 1);
+    tzset();
+
     Day_ns start_ts = mktime(&day_fields) * NS_PER_SEC;
+
+    tz ? setenv("TZ", tz, 1) : unsetenv("TZ");
+    tzset();
     return start_ts;
 }
 
@@ -724,7 +737,7 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         }
         
-        private_analyze_main(argv[1], start_ts.value());
+        private_analyze_main(argv[1], start_ts.value()); 
     } catch (const exception & e) {
         cerr << e.what() << "\n";
         return EXIT_FAILURE;

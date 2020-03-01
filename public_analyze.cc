@@ -30,9 +30,10 @@ using google::sparse_hash_map;
 using google::dense_hash_map;
 
 /* 
- * Read in anonymized data (grouped by timestamp), into data structures 
+ * Read in anonymized data (grouped by timestamp/server/channel), into data structures 
  * grouped by stream. 
- * TODO: update comments
+ * To stdout, outputs summary of each stream (one stream per line).
+ * Takes experimental settings and date as arguments.
  */
 
 using event_table = map<uint64_t, Event>;
@@ -221,8 +222,7 @@ class Parser {
                     throw runtime_error("error reading from " + video_sent_filename);
                 }
                 // leave private fields blank
-                // TODO: name fields with same type
-                VideoSent video_sent{ssim_index, delivery_rate, expt_id, nullopt, nullopt, nullopt,
+                VideoSent video_sent{ssim_index = ssim_index, delivery_rate, expt_id, nullopt, nullopt, nullopt,
                     size, formats.forward_map_vivify(format), cwnd, in_flight, min_rtt, rtt, video_ts};
 
                 /* Add chunk to list of chunks corresponding to its stream */
@@ -317,8 +317,7 @@ class Parser {
                 cout << fixed;
 
                 // ts in anonymized data include nanoseconds -- truncate to seconds
-                // TODO: use NS_PER_SEC 
-                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") 
+                cout << (summary.base_time / NS_PER_SEC) << " " << (summary.valid ? "good " : "bad ") 
                      << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
                      << summary.scheme << " extent=" << summary.time_extent
                      << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
@@ -416,7 +415,7 @@ class Parser {
 
             const uint64_t base_time = events.front().first;
             ret.base_time = base_time;
-            ret.time_extent = (events.back().first - base_time) / double(1000000000);
+            ret.time_extent = (events.back().first - base_time) / double(NS_PER_SEC);
 
             bool started = false;
             bool playing = false;
@@ -439,7 +438,7 @@ class Parser {
 
                 const auto & [ts, event] = events[i];
 
-                const float relative_time = (ts - base_time) / 1000000000.0;
+                const float relative_time = (ts - base_time) / float(NS_PER_SEC);
 
                 if (relative_time - last_sample > 8.0) {
                     ret.bad_reason = "event_interval>8s";
@@ -531,10 +530,6 @@ class Parser {
         }
 };
 
-// LEFT OFF: rerun full data w/ tmpdir (still need submission_anon in script) to diff chunk data in stats;
-// also run schemedays and confint (run tiny test here first)
-// remove TODOs
-// push (inc Makefile.am)
 void public_analyze_main(const string & experiment_dump_filename, const string & date_str) {
     Parser parser{experiment_dump_filename};
     parser.parse_client_buffer_input(date_str);
@@ -542,6 +537,7 @@ void public_analyze_main(const string & experiment_dump_filename, const string &
     parser.analyze_streams(); 
 }
 
+/* Date is used to name csvs. */
 int main(int argc, char *argv[]) {
     try {
         if (argc <= 0) {
