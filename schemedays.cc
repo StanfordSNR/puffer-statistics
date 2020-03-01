@@ -160,13 +160,13 @@ class SchemeDays {
             }
 
             split_on_char(line, ' ', fields);
-            if (fields.size() != 18) {  // TODO: confinterval also uses this number
+            if (fields.size() != 14) {  // TODO: confinterval also uses this number
                 throw runtime_error("Bad line: " + line_storage);
             }
 
             string_view& ts_str = fields[0];
             string_view& scheme = fields[4];
-            string_view& time_after_startup = fields[16];
+            string_view& time_after_startup = fields[12];
 
             const uint64_t ts = to_uint64(ts_str);
             
@@ -357,6 +357,7 @@ void scheme_days_main(const string & list_filename, const string & desired_schem
         scheme_days.intersect(desired_schemes, intersection_filename);    
     } else if (action == WATCHTIMES_LIST) {
         /* Watch times map => watch times file */
+        // TODO: write two watch time files: one for slow
         scheme_days.write_watch_times(); 
     }
 }

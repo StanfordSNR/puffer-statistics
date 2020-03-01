@@ -3,28 +3,15 @@
 
 #include <stdexcept>
 #include <string>
-
-// TODO: remove unnecessary includes, check for other shared stuff b/w private and public 
 #include <cstdlib>
-#include <stdexcept>
 #include <iostream>
-#include <vector>
-#include <string>
 #include <array>
 #include <tuple>
 #include <charconv>
-#include <map>
 #include <cstring>
 #include <fstream>
 #include <google/sparse_hash_map>
 #include <google/dense_hash_map>
-#include <boost/container_hash/hash.hpp>
-
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#include <jsoncpp/json/json.h>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -35,25 +22,20 @@ using namespace std::literals;
 using google::sparse_hash_map;
 using google::dense_hash_map;
 
-constexpr static unsigned BYTES_OF_ENTROPY = 32;
+static constexpr unsigned BYTES_OF_ENTROPY = 32;
 
 // 32-byte cryptographically secure random ID
 using public_session_id = array<char, BYTES_OF_ENTROPY>;
 
-// ~uniquely and anonymously identifies a stream
+// Uniquely and anonymously identifies a stream
 struct public_stream_id {
     public_session_id session_id{};
-    /* Index of stream in list of disambiguous streams recorded for a session.
-     * This doesn't strictly represent channel changes, since a user could switch 
-     * channels without us getting an event. TODO: this serves my purpose, since only needs 
-     * to be unique across streams in a session. But, for stream with first_init_id,
-     * calculated as init_id - first_init_id (as opposed to always incrementing for 
-     * streams with no first_init_id). Cou*/
+    
+    /* Identifies a stream within a session (unique across streams in a session).
+     * Used to group datapoints belonging to the same stream; not particularly
+     * meaningful otherwise.
+     */
     unsigned index{};
-    /* TODO: check where this is needed */
-    bool operator==(const public_stream_id & o) const { 
-        return (tie(session_id, index) == tie(o.session_id, o.index)); 
-    }
 };
 
 size_t memcheck() {
@@ -355,7 +337,6 @@ std::ostream& operator<< (std::ostream& out, const Sysinfo& s) {
 }
 
 struct VideoSent {
-    // types taken from convert_tag_to_field.py
     optional<float> ssim_index{};
     optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, first_init_id{}, user_id{}, size{},
     format{}, cwnd{}, in_flight{}, min_rtt{}, rtt{};
@@ -460,6 +441,76 @@ std::ostream& operator<< (std::ostream& out, const VideoSent& s) {
         << "\n";
 }
 
+struct VideoAcked {
+    optional<uint32_t> expt_id{}, init_id{}, first_init_id{}, user_id{};
+    optional<uint64_t> video_ts{};
+
+    bool bad = false;
+
+    bool complete() const {
+        return expt_id and init_id and user_id and video_ts; 
+    }
+
+    bool operator==(const VideoAcked & other) const {
+        return expt_id == other.expt_id
+            and init_id == other.init_id
+            and user_id == other.user_id
+            and first_init_id == other.first_init_id
+            and video_ts == other.video_ts;
+    }
+
+    bool operator!=(const VideoAcked & other) const { return not operator==(other); }
+
+    template <typename T>
+        void set_unique( optional<T> & field, const T & value ) {
+            if (not field.has_value()) {
+                field.emplace(value);
+            } else {
+                if (field.value() != value) {
+                    if (not bad) {
+                        bad = true;
+                        cerr << "error trying to set contradictory videoacked value " << value <<
+                                "(old value " << field.value() << ")\n";
+                        cerr << "Contradictory videoacked:\n";
+                        cerr << *this; 
+                    }
+                    // throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+                }
+            }
+        }
+
+    void insert_unique(const string_view key, const string_view value,
+            string_table & usernames) {
+        if (key == "first_init_id"sv) {
+            set_unique( first_init_id, influx_integer<uint32_t>( value ) );
+        } else if (key == "init_id"sv) {
+            set_unique( init_id, influx_integer<uint32_t>( value ) );
+        } else if (key == "expt_id"sv) {
+            set_unique( expt_id, influx_integer<uint32_t>( value ) );
+        } else if (key == "user"sv) {
+            if (value.size() <= 2 or value.front() != '"' or value.back() != '"') {
+                throw runtime_error("invalid username string: " + string(value));
+            }
+            set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
+        } else if (key == "video_ts"sv) {
+            set_unique( video_ts, influx_integer<uint64_t>( value ) );
+        } else if (key == "buffer"sv or key == "cum_rebuffer"sv) {
+            // ignore
+        } else {
+            throw runtime_error( "unknown key: " + string(key) );
+        }
+    }
+    friend std::ostream& operator<<(std::ostream& out, const VideoAcked& s); 
+};
+std::ostream& operator<< (std::ostream& out, const VideoAcked& s) {        
+    return out << "init_id=" << s.init_id.value_or(-1)
+        << ", expt_id=" << s.expt_id.value_or(-1)
+        << ", user_id=" << s.user_id.value_or(-1)
+        << ", first_init_id=" << s.first_init_id.value_or(-1)
+        << ", video_ts=" << s.video_ts.value_or(-1)
+        << "\n";
+}
+
 // print a tuple of any size, promoting uint8_t
 template<class Tuple, std::size_t N>
 struct TuplePrinter {
@@ -487,7 +538,3 @@ void print(const std::tuple<Args...>& t)
 }
 
 #endif
-
-/* TODO
- * update comments
- */

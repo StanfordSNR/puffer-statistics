@@ -903,7 +903,7 @@ class Parser {
                  * After 11/27: Each data point is recorded with first_init_id and init_id.
                  * Also, sysinfo is supplied on both load and channel change. */
                 auto sysinfo_it = sysinfos.end();
-                int channel_changes = -1;
+                // int channel_changes = -1;
                 // use first event to check if stream uses first_init_id
                 optional<uint32_t> first_init_id = events.front().second->first_init_id;
                 if (first_init_id) {
@@ -914,7 +914,7 @@ class Parser {
                     sysinfo_it = sysinfos.find({get<0>(key),
                             get<1>(key),
                             get<2>(key)});
-                    channel_changes = get<0>(key) - first_init_id.value();
+                    // channel_changes = get<0>(key) - first_init_id.value();
                 } else {
                     for ( unsigned int decrement = 0; decrement < 1024; decrement++ ) {
                         sysinfo_it = sysinfos.find({get<0>(key) - decrement,
@@ -923,7 +923,7 @@ class Parser {
                         if (sysinfo_it == sysinfos.end()) {
                             // loop again
                         } else {
-                            channel_changes = decrement;
+                            // channel_changes = decrement;
                             break;
                         }
                     }
@@ -953,20 +953,23 @@ class Parser {
                     overall_ssim_1_chunks += ssim_1_chunks;
                 }
 
-                cerr << "unused variables (for test) :" << channel_changes << mean_ssim << endl;
-
                 cout << fixed;
 
                 // ts from influx export include nanoseconds -- truncate to seconds
                 // cout all summary values for comparison against 
                 // public version that outputs client_buffer only
-                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
-                    << summary.scheme << " extent=" << summary.time_extent
-                    << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
-                    << " startup_delay=" << summary.cum_rebuf_at_startup
-                    << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
-                    << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
-                    << "\n";
+                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") 
+                     << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
+                     << summary.scheme << " extent=" << summary.time_extent
+                     << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
+                     << " mean_ssim=" << mean_ssim
+                     << " mean_delivery_rate=" << mean_delivery_rate
+                     << " average_bitrate=" << average_bitrate
+                     << " ssim_variation_db=" << ssim_variation
+                     << " startup_delay=" << summary.cum_rebuf_at_startup
+                     << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
+                     << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
+                     << "\n";
 
                 total_extent += summary.time_extent;
 

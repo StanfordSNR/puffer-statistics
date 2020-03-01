@@ -29,21 +29,15 @@ using namespace std::literals;
 using google::sparse_hash_map;
 using google::dense_hash_map;
 
-/* Read in anonymized data (grouped by timestamp), into data structures 
- * grouped by stream.
- * Use timestamps in seconds.
+/* 
+ * Read in anonymized data (grouped by timestamp), into data structures 
+ * grouped by stream. 
+ * TODO: update comments
  */
-
-// TODO: remove unnecc fcts
 
 using event_table = map<uint64_t, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
 using video_sent_table = map<uint64_t, VideoSent>;
-/* Whenever a timestamp is used to represent a day, round down to Influx backup hour.
- * Timestamps in input are nanoseconds - use nanoseconds up until writing ts to stdout. */
-using Day_ns = uint64_t;
-/* I only want to type this once. */
-#define NS_PER_SEC 1000000000UL
 
 #define MAX_SSIM 0.99999    // max acceptable raw SSIM (exclusive) 
 // ignore SSIM ~ 1
@@ -54,10 +48,9 @@ optional<double> raw_ssim_to_db(const double raw_ssim) {
 
 class Parser {
     private:
-        string_table usernames{};
-        string_table browsers{};
-        string_table ostable{};
-
+        // Convert format string to uint8_t for storage
+        string_table formats{};
+        
         // streams[public_stream_id] = vec<[ts, Event]>
         using stream_key = tuple<public_session_id, unsigned>;   // unpack struct for hash
         /*                                          index */
@@ -69,7 +62,7 @@ class Parser {
         dense_hash_map<sysinfo_key, Sysinfo, boost::hash<sysinfo_key>> sysinfos;
 
         // chunks[public_stream_id] = vec<[ts, VideoSent]>
-        dense_hash_map<public_stream_id, vector<pair<uint64_t, const VideoSent*>>, boost::hash<public_stream_id>> chunks;
+        dense_hash_map<stream_key, vector<pair<uint64_t, const VideoSent>>, boost::hash<stream_key>> chunks;
 
         unsigned int bad_count = 0;
         
@@ -119,20 +112,17 @@ class Parser {
         Parser(const string & experiment_dump_filename)
             : streams(), sysinfos(), chunks()
         {
-            // TODO: check sysinfo/chunks empty keys
+            // TODO: check sysinfo empty key
             streams.set_empty_key( {{0}, -1U} );    // we never insert a stream with index -1
             sysinfos.set_empty_key({0,0,0});
-            chunks.set_empty_key({{0},0});
+            chunks.set_empty_key( {{0}, -1U} );    
+            formats.forward_map_vivify("unknown");
 
-            usernames.forward_map_vivify("unknown");
-            browsers.forward_map_vivify("unknown");
-            ostable.forward_map_vivify("unknown");
-            
             read_experimental_settings_dump(experiment_dump_filename);
         }
 
         /* Read anonymized client_buffer input file into streams map. 
-         * Each line of input is one event, recorded with its public stream ID. */
+         * Each line of input is one event datapoint, recorded with its public stream ID. */
         void parse_client_buffer_input(const string & date_str) {
             const string & client_buffer_filename = "client_buffer_" + date_str + ".csv";
             ifstream client_buffer_file{client_buffer_filename};
@@ -152,58 +142,127 @@ class Parser {
             // ignore column labels
             getline(client_buffer_file, line_storage);
            
-            // cerr << "\nParsed events:\n" << endl;
+            unsigned line_no = 0;
             while (getline(client_buffer_file, line_storage)) {
+                if (line_no % 1000000 == 0) {
+                    const size_t rss = memcheck() / 1024;
+                    cerr << "line " << line_no++ / 1000000 << "M, RSS=" << rss << " MiB\n"; 
+                }
                 istringstream line(line_storage);
-                /*
                 if (not (line >> ts >> comma and comma == ',' and                
                          // read stream id as raw bytes
-                         line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and
-                         line >> comma and comma == ',' and line >> stream_id.index >> comma and
-                         comma == ',' and line >> expt_id >> comma and comma == ',' and
+                         line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and 
+                         line >> comma and comma == ',' and 
+                         line >> stream_id.index >> comma and comma == ',' and 
+                         line >> expt_id >> comma and comma == ',' and
                          getline(line, channel, ',') and getline(line, event_type_str, ',') and
-                         line >> buffer >> comma and comma == ',' and line >> cum_rebuf ) ) {
-                    throw runtime_error("error reading from " + client_buffer_filename);
-                }
-                */
-                if (not (line >> ts >> comma and                
-                         // read stream id as raw bytes
-                         line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and
-                         line >> comma >> stream_id.index >> comma >> expt_id >> comma and 
-                         getline(line, channel, ',') and getline(line, event_type_str, ',') and
-                         line >> buffer >> comma >> cum_rebuf ) ) {
+                         line >> buffer >> comma and comma == ',' and line >> cum_rebuf) ) {
                     throw runtime_error("error reading from " + client_buffer_filename);
                 }
                 
                 // no need to fill in private fields
                 Event event{nullopt, nullopt, expt_id, nullopt, string_view(event_type_str), 
                             buffer, cum_rebuf};
-                /*
-                cerr << "ts " << ts << endl; 
-                cerr << "channel changes " << stream_id.index << endl;
-                cerr << "session ID " << stream_id.session_id.data() << endl;
-                cerr << event;
-                */
+
                 /* Add event to list of events corresponding to its stream */
-                streams[{stream_id.session_id, stream_id.index}].push_back({ts, event});   // allocates event 
+                streams[{stream_id.session_id, stream_id.index}].emplace_back(make_pair(ts, event));   // allocates event 
             } 
 
             client_buffer_file.close();   
             if (client_buffer_file.bad()) {
                 throw runtime_error("error writing " + client_buffer_filename);
             }
+        }
+        
+        /* Read anonymized video_sent input file into streams map. 
+         * Each line of input is one chunk, recorded with its public stream ID. */
+        void parse_video_sent_input(const string & date_str) {
+            const string & video_sent_filename = "video_sent_" + date_str + ".csv";
+            ifstream video_sent_file{video_sent_filename};
+            if (not video_sent_file.is_open()) {
+                throw runtime_error( "can't open " + video_sent_filename);
+            }
             
-            // TODO: remove
+            string line_storage;
+            char comma;
+            uint64_t ts, video_ts; 
+            public_stream_id stream_id;
+            // can't read directly into optional
+            string channel, format;
+            float ssim_index;
+            uint32_t delivery_rate, expt_id, size, cwnd, in_flight, min_rtt, rtt;
+            
+            // ignore column labels
+            getline(video_sent_file, line_storage);
+
+            unsigned line_no = 0;
+            while (getline(video_sent_file, line_storage)) {
+                if (line_no % 1000000 == 0) {
+                    const size_t rss = memcheck() / 1024;
+                    cerr << "line " << line_no++ / 1000000 << "M, RSS=" << rss << " MiB\n"; 
+                }
+                istringstream line(line_storage);
+                if (not (line >> ts >> comma and comma == ',' and                
+                         // read stream id as raw bytes
+                         line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and 
+                         line >> comma and comma == ',' and 
+                         line >> stream_id.index >> comma and comma == ',' and 
+                         line >> expt_id >> comma and comma == ',' and
+                         getline(line, channel, ',') and 
+                         line >> video_ts >> comma and comma == ',' and 
+                         getline(line, format, ',') and 
+                         line >> size >> comma and comma == ',' and
+                         line >> ssim_index >> comma and comma == ',' and
+                         line >> cwnd >> comma and comma == ',' and
+                         line >> in_flight >> comma and comma == ',' and 
+                         line >> min_rtt >> comma and comma == ',' and
+                         line >> rtt >> comma and comma == ',' and
+                         line >> delivery_rate) ) {
+                    throw runtime_error("error reading from " + video_sent_filename);
+                }
+                // leave private fields blank
+                // TODO: name fields with same type
+                VideoSent video_sent{ssim_index, delivery_rate, expt_id, nullopt, nullopt, nullopt,
+                    size, formats.forward_map_vivify(format), cwnd, in_flight, min_rtt, rtt, video_ts};
+
+                /* Add chunk to list of chunks corresponding to its stream */
+                chunks[{stream_id.session_id, stream_id.index}].emplace_back(make_pair(ts, video_sent));   
+            } 
+
+            video_sent_file.close();   
+            if (video_sent_file.bad()) {
+                throw runtime_error("error writing " + video_sent_filename);
+            }
+        }
+       
+        void print_grouped_data() {
+            cerr << "streams:" << endl;
+            for ( const auto & [stream_id, events] : streams ) {
+                const auto & [session_id, index] = stream_id;
+                cerr << "public session ID (first two char): " << session_id[0] << session_id[1] << endl;
+                cerr << ", stream index: " << index << endl;
+                for ( const auto & [ts, event] : events ) {
+                    cerr << ts << ", " << event; 
+                }
+            }            
             // Count total events, streams
             size_t n_total_events = 0;
             for ( auto & [unpacked_stream_id, events] : streams ) {
                 n_total_events += events.size();
             }
             cerr << "n_total_events " << n_total_events << endl;
-            cerr << "n_total_streams CHECK ME " << streams.size() << endl;
-
+            cerr << "n_total_streams " << streams.size() << endl;
+            cerr << "chunks:" << endl;
+            for ( const auto & [stream_id, stream_chunks] : chunks ) {
+                const auto & [session_id, index] = stream_id;
+                cerr << "public session ID (first two char): " << session_id[0] << session_id[1] << endl;
+                cerr << ", stream index: " << index << endl;
+                for ( const auto & [ts, video_sent] : stream_chunks ) {
+                    cerr << ts << ", " << video_sent; 
+                }
+            }
         }
-       
+
         /* Corresponds to a line of analyze output; summarizes a stream */
         struct EventSummary {
             uint64_t base_time{0};  // lowest ts in stream, in NANOseconds
@@ -240,17 +299,37 @@ class Parser {
             
             for ( auto & [unpacked_stream_id, events] : streams ) {
                 const EventSummary summary = summarize(events);
-                // cerr << "stream summary:\n" << summary.base_time << summary.scheme << endl;
+               
+                /* find matching videosent stream */
+                const auto [normal_ssim_chunks, ssim_1_chunks, total_chunks, ssim_sum, 
+                            mean_delivery_rate, average_bitrate, ssim_variation] = video_summarize(unpacked_stream_id);
+                const double mean_ssim = ssim_sum == -1 ? -1 : ssim_sum / normal_ssim_chunks;
+                const size_t high_ssim_chunks = total_chunks - normal_ssim_chunks;
+
+                if (mean_delivery_rate < 0 ) {
+                    missing_video_stats++;
+                } else {
+                    overall_chunks += total_chunks;
+                    overall_high_ssim_chunks += high_ssim_chunks;
+                    overall_ssim_1_chunks += ssim_1_chunks;
+                }
+
                 cout << fixed;
 
-                // ts from influx export include nanoseconds -- truncate to seconds
-                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
-                    << summary.scheme << " extent=" << summary.time_extent
-                    << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
-                    << " startup_delay=" << summary.cum_rebuf_at_startup
-                    << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
-                    << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
-                    << "\n";
+                // ts in anonymized data include nanoseconds -- truncate to seconds
+                // TODO: use NS_PER_SEC 
+                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") 
+                     << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
+                     << summary.scheme << " extent=" << summary.time_extent
+                     << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
+                     << " mean_ssim=" << mean_ssim
+                     << " mean_delivery_rate=" << mean_delivery_rate
+                     << " average_bitrate=" << average_bitrate
+                     << " ssim_variation_db=" << ssim_variation
+                     << " startup_delay=" << summary.cum_rebuf_at_startup
+                     << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
+                     << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
+                     << "\n";
 
                 total_extent += summary.time_extent;
 
@@ -272,6 +351,61 @@ class Parser {
                  << " overall_chunks=" << overall_chunks << " overall_high_ssim_chunks=" << overall_high_ssim_chunks 
                  << " overall_ssim_1_chunks=" << overall_ssim_1_chunks << "\n";
             cout << "#total_extent=" << total_extent / 3600.0 << " total_time_after_startup=" << total_time_after_startup / 3600.0 << " total_stall_time=" << total_stall_time / 3600.0 << "\n";
+        }
+
+        /* Summarize a list of Videosents, ignoring SSIM ~ 1 */
+        // normal_ssim_chunks, ssim_1_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation]
+        tuple<size_t, size_t, size_t, double, double, double, double> video_summarize(const stream_key & key) const {
+            const auto videosent_it = chunks.find(key);
+            if (videosent_it == chunks.end()) {
+                return { -1, -1, -1, -1, -1, -1, -1 };
+            }
+
+            const vector<pair<uint64_t, const VideoSent>> & chunk_stream = videosent_it->second;
+
+            double ssim_sum = 0;    // raw index
+            double delivery_rate_sum = 0;
+            double bytes_sent_sum = 0;
+            optional<double> ssim_cur_db{};     // empty if index == 1
+            optional<double> ssim_last_db{};    // empty if no previous, or previous had index == 1
+            double ssim_absolute_variation_sum = 0;
+            size_t num_ssim_samples = chunk_stream.size();
+            /* variation is calculated between each consecutive pair of chunks */
+            size_t num_ssim_var_samples = chunk_stream.size() - 1;  
+            size_t num_ssim_1_chunks = 0;
+
+            for ( const auto [ts, videosent] : chunk_stream ) {
+                float raw_ssim = videosent.ssim_index.value(); // would've thrown by this point if not set
+                if (raw_ssim == 1.0) {
+                    num_ssim_1_chunks++; 
+                }
+                ssim_cur_db = raw_ssim_to_db(raw_ssim);
+                if (ssim_cur_db.has_value()) {
+                    ssim_sum += raw_ssim;
+                } else {
+                    num_ssim_samples--; // for ssim_mean, ignore chunk with SSIM == 1
+                }
+
+                if (ssim_cur_db.has_value() && ssim_last_db.has_value()) {  
+                    ssim_absolute_variation_sum += abs(ssim_cur_db.value() - ssim_last_db.value());
+                } else {
+                    num_ssim_var_samples--; // for ssim_var, ignore pair containing chunk with SSIM == 1
+                }
+
+                ssim_last_db = ssim_cur_db;
+
+                delivery_rate_sum += videosent.delivery_rate.value();
+                bytes_sent_sum += videosent.size.value();
+            }
+
+            const double average_bitrate = 8 * bytes_sent_sum / (2.002 * chunk_stream.size());
+
+            double average_absolute_ssim_variation = -1;
+            if (num_ssim_var_samples > 0) {
+                average_absolute_ssim_variation = ssim_absolute_variation_sum / num_ssim_var_samples;
+            }
+
+            return { num_ssim_samples, num_ssim_1_chunks, chunk_stream.size(), ssim_sum, delivery_rate_sum / chunk_stream.size(), average_bitrate, average_absolute_ssim_variation };
         }
 
         /* Summarize a list of events corresponding to a stream. */
@@ -397,10 +531,15 @@ class Parser {
         }
 };
 
+// LEFT OFF: rerun full data w/ tmpdir (still need submission_anon in script) to diff chunk data in stats;
+// also run schemedays and confint (run tiny test here first)
+// remove TODOs
+// push (inc Makefile.am)
 void public_analyze_main(const string & experiment_dump_filename, const string & date_str) {
     Parser parser{experiment_dump_filename};
     parser.parse_client_buffer_input(date_str);
-    parser.analyze_streams();
+    parser.parse_video_sent_input(date_str);
+    parser.analyze_streams(); 
 }
 
 int main(int argc, char *argv[]) {

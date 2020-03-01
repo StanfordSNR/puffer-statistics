@@ -12,7 +12,7 @@ public_analyze_SOURCES = public_analyze.cc
 public_analyze_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)
 
 private_analyze_SOURCES = private_analyze.cc
-private_analyze_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)
+private_analyze_LDADD = $(jemalloc_LIBS)
 
 submission_anon_analyze_SOURCES = submission_anon_analyze.cc
 submission_anon_analyze_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)
