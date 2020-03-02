@@ -955,8 +955,8 @@ class Parser {
                 cout << fixed;
 
                 // ts from influx export include nanoseconds -- truncate to seconds
-                // cout all summary values for comparison against 
-                // public version that outputs client_buffer only
+                // cout all non-private values for comparison against 
+                // public version 
                 cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") 
                      << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
                      << summary.scheme << " extent=" << summary.time_extent
@@ -1195,7 +1195,16 @@ optional<Day_ns> parse_date(const string & date) {
     if (not strptime(strptime_str.str().c_str(), "%Y-%m-%d %H:%M:%S", &day_fields)) {
         return nullopt;
     }
+
+    // set timezone to UTC for mktime
+    char* tz = getenv("TZ");
+    setenv("TZ", "UTC", 1);
+    tzset();
+
     Day_ns start_ts = mktime(&day_fields) * NS_PER_SEC;
+
+    tz ? setenv("TZ", tz, 1) : unsetenv("TZ");
+    tzset();
     return start_ts;
 }
 

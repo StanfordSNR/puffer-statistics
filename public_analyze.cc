@@ -175,7 +175,7 @@ class Parser {
             }
         }
         
-        /* Read anonymized video_sent input file into streams map. 
+        /* Read anonymized video_sent input file into chunks map. 
          * Each line of input is one chunk, recorded with its public stream ID. */
         void parse_video_sent_input(const string & date_str) {
             const string & video_sent_filename = "video_sent_" + date_str + ".csv";

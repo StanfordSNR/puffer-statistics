@@ -28,7 +28,7 @@ single_day_stats() {
     influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
         ~/puffer-statistics/submission_anon_analyze \
         ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_submission_anon_stats.txt \
-    2> ${date}_submission_anon_err.txt
+        2> ${date}_submission_anon_err.txt
    
     # Influx export => anonymized csv 
     #echo "starting private analyze" 
@@ -44,13 +44,19 @@ single_day_stats() {
     # clean up data and csvs (TODO: test only!), leave stats/err.txt
     rm -rf ${date} 
     rm ${date}.tar.gz
-    rm client_buffer_${date}.csv
+    rm *.csv
 
-    # diff submission and new stats -- summary lines will be slightly different bc floats
+    # diff submission and new stats -- ignore tiny differences from float addition order
     # sort, since public analyze outputs in different order
-    sort -o ${date}_submission_anon_stats.txt ${date}_submission_anon_stats.txt 
-    sort -o ${date}_public_analyze_stats.txt ${date}_public_analyze_stats.txt
-    diff <(tail -n +3 ${date}_submission_anon_stats.txt) <(tail -n +3 ${date}_public_analyze_stats.txt) >> diffs.txt
+    stats=(${date}_submission_anon_stats.txt ${date}_public_analyze_stats.txt)
+    for stats in "${stats[@]}"; do
+        sort -o $stats $stats
+        # set up for numdiff
+        sed -i 's/=/= /g' $stats
+        sed -i 's/%//g' $stats
+    done
+    # numdiff doesn't work with tail
+    numdiff -r 0.005 ${date}_submission_anon_stats.txt ${date}_public_analyze_stats.txt >> diffs.txt
 }
 
 if [ "$#" -lt 1 ]; then

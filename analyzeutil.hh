@@ -496,7 +496,7 @@ struct VideoAcked {
             set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
         } else if (key == "video_ts"sv) {
             set_unique( video_ts, influx_integer<uint64_t>( value ) );
-        } else if (key == "buffer"sv or key == "cum_rebuffer"sv) {
+        } else if (key == "buffer"sv or key == "cum_rebuffer"sv or key == "ssim_index"sv) {
             // ignore
         } else {
             throw runtime_error( "unknown key: " + string(key) );
