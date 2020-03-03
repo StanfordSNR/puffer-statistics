@@ -246,10 +246,11 @@ class Parser {
             while (cin.good()) {
                 if (line_no % 1000000 == 0) {
                     const size_t rss = memcheck() / 1024;
-                    cerr << "line " << line_no++ / 1000000 << "M, RSS=" << rss << " MiB\n"; 
+                    cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n"; 
                 }
 
                 getline(cin, line_storage);
+                line_no++;
 
                 const string_view line{line_storage};
 
@@ -383,8 +384,10 @@ class Parser {
                     for (const auto & [ts,event] : client_buffer[server][channel]) {
                         if (line_no % 1000000 == 0) {
                             const size_t rss = memcheck() / 1024;
-                            cerr << "line " << line_no++ / 1000000 << "M, RSS=" << rss << " MiB\n"; 
+                            cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n"; 
                         }
+                        line_no++;
+
                         if (event.bad) {
                             bad_count++;
                             cerr << "Skipping bad data point (of " << bad_count 
@@ -513,7 +516,15 @@ class Parser {
             }
         }
 
-        /* Given private stream id, return public session ID and stream index */
+        /* Given private stream id, return public session ID and stream index.
+         * Throws if public IDs not found, which represents some logic error for
+         * client_buffer, but not for video_sent (e.g. 2019-03-30T11_2019-03-31T11
+         * has a video_sent with init_id 901804980 belonging to a stream with no corresponding 
+         * client_buffer.)
+         * XXX: could still record chunks like these in csv
+         * (by using video_sent as well as client_buffer to build stream_ids), 
+         * but a video_sent with no corresponding 
+         * client_buffer seems spurious, so ignore such chunks for now. */
         const pair<public_session_id &, unsigned> get_anonymous_ids(const private_stream_key & stream_key) {
             optional<uint32_t> first_init_id = stream_key.first_init_id;
             // Look up anonymous session/stream ID
@@ -523,7 +534,6 @@ class Parser {
                 {stream_key.expt_id, stream_key.server, stream_key.channel};
             const stream_ids_iterator found_ambiguous_stream = stream_ids.find(private_id);
             if (found_ambiguous_stream == stream_ids.end()) {
-                // This shouldn't happen -- all stream_keys should have IDs by now
                 throw runtime_error( "Failed to find anonymized session/stream ID for init_id " 
                                       + to_string(stream_key.init_id) + ", user " + to_string(stream_key.user_id) 
                                       + " (ambiguous stream ID not found)" );
@@ -541,7 +551,6 @@ class Parser {
                 auto found_disambiguous_stream = find_if(found_streams.begin(), found_streams.end(),
                      [&disambiguation] (const stream_index& s) { return s.disambiguation == disambiguation; });
                 if (found_disambiguous_stream == found_streams.end()) {
-                    // This shouldn't happen -- all private_stream_keys should have IDs by now
                     throw runtime_error( "Failed to find anonymized session/stream ID for init_id " 
                                           + to_string(stream_key.init_id) 
                                           + " (ambiguous stream ID not found)" );
@@ -571,6 +580,7 @@ class Parser {
                     for (const auto & [ts,event] : client_buffer[server][channel]) {
                         // already printed bad event info and threw for incomplete events when anonymizing
                         if (event.bad) continue;
+                        // Don't catch -- see comment on get_anonymous_ids
                         const auto & [session_id, index] = get_anonymous_ids({event.first_init_id, *event.init_id,
                                 *event.user_id, *event.expt_id, server, channel});
                         client_buffer_file << ts << ",";
@@ -614,13 +624,22 @@ class Parser {
                         }
 
                         const string & format_str = formats.reverse_map(*video_sent.format);
-                        const auto & [session_id, index] = 
-                            get_anonymous_ids({video_sent.first_init_id, *video_sent.init_id,
-                                *video_sent.user_id, *video_sent.expt_id, server, channel});
+                        // catch -- see comment on get_anonymous_ids
+                        optional<pair<public_session_id &, unsigned>> optl_public_id; 
+                        try {
+                            const auto & public_id = 
+                                get_anonymous_ids({video_sent.first_init_id, *video_sent.init_id,
+                                    *video_sent.user_id, *video_sent.expt_id, server, channel});
+                            optl_public_id.emplace(public_id);
+                        } catch (const exception & e) {
+                            cerr << "Chunk with timestamp " << ts << " has no corresponding event: " 
+                                 << e.what() << "\n";
+                            continue;   // don't dump this chunk
+                        }
                         video_sent_file << ts << ",";
                         // write session_id as raw bytes
-                        video_sent_file.write(session_id.data(), BYTES_OF_ENTROPY);
-                        video_sent_file << "," << index
+                        video_sent_file.write(optl_public_id.value().first.data(), BYTES_OF_ENTROPY);
+                        video_sent_file << "," << optl_public_id.value().second // index
                                         << "," << *video_sent.expt_id << "," << channels.reverse_map(channel) << "," 
                                         << *video_sent.video_ts << "," << format_str << ","
                                         << *video_sent.size << "," << *video_sent.ssim_index << ","
@@ -661,13 +680,21 @@ class Parser {
 
                         // TODO: format of video_ts? Looks different than regular ts format, but 
                         // same in video_acked and video_sent
-                        const auto & [session_id, index] = 
-                            get_anonymous_ids({video_acked.first_init_id, *video_acked.init_id,
-                                *video_acked.user_id, *video_acked.expt_id, server, channel});
+                        optional<pair<public_session_id &, unsigned>> optl_public_id; 
+                        try {
+                            const auto & public_id = 
+                                get_anonymous_ids({video_acked.first_init_id, *video_acked.init_id,
+                                    *video_acked.user_id, *video_acked.expt_id, server, channel});
+                            optl_public_id.emplace(public_id);
+                        } catch (const exception & e) {
+                            cerr << "VideoAcked with timestamp " << ts << " has no corresponding event: " 
+                                 << e.what() << "\n";
+                            continue;   // don't dump this chunk
+                        }
                         video_acked_file << ts << ",";
                         // write session_id as raw bytes
-                        video_acked_file.write(session_id.data(), BYTES_OF_ENTROPY);
-                        video_acked_file << "," << index
+                        video_acked_file.write(optl_public_id.value().first.data(), BYTES_OF_ENTROPY);
+                        video_acked_file << "," << optl_public_id.value().second // index
                                          << "," << *video_acked.expt_id << "," << channels.reverse_map(channel) 
                                          << "," << *video_acked.video_ts << "\n";
                     }

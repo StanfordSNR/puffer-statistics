@@ -147,8 +147,10 @@ class Parser {
             while (getline(client_buffer_file, line_storage)) {
                 if (line_no % 1000000 == 0) {
                     const size_t rss = memcheck() / 1024;
-                    cerr << "line " << line_no++ / 1000000 << "M, RSS=" << rss << " MiB\n"; 
+                    cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n"; 
                 }
+                line_no++;
+
                 istringstream line(line_storage);
                 if (not (line >> ts >> comma and comma == ',' and                
                          // read stream id as raw bytes
@@ -200,8 +202,10 @@ class Parser {
             while (getline(video_sent_file, line_storage)) {
                 if (line_no % 1000000 == 0) {
                     const size_t rss = memcheck() / 1024;
-                    cerr << "line " << line_no++ / 1000000 << "M, RSS=" << rss << " MiB\n"; 
+                    cerr << "line " << line_no / 1000000 << "M, RSS=" << rss << " MiB\n"; 
                 }
+                line_no++;
+
                 istringstream line(line_storage);
                 if (not (line >> ts >> comma and comma == ',' and                
                          // read stream id as raw bytes
@@ -317,7 +321,7 @@ class Parser {
                 cout << fixed;
 
                 // ts in anonymized data include nanoseconds -- truncate to seconds
-                cout << (summary.base_time / NS_PER_SEC) << " " << (summary.valid ? "good " : "bad ") 
+                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") 
                      << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
                      << summary.scheme << " extent=" << summary.time_extent
                      << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
@@ -415,7 +419,7 @@ class Parser {
 
             const uint64_t base_time = events.front().first;
             ret.base_time = base_time;
-            ret.time_extent = (events.back().first - base_time) / double(NS_PER_SEC);
+            ret.time_extent = (events.back().first - base_time) / double(1000000000);
 
             bool started = false;
             bool playing = false;
@@ -438,7 +442,7 @@ class Parser {
 
                 const auto & [ts, event] = events[i];
 
-                const float relative_time = (ts - base_time) / float(NS_PER_SEC);
+                const float relative_time = (ts - base_time) / 1000000000.0;
 
                 if (relative_time - last_sample > 8.0) {
                     ret.bad_reason = "event_interval>8s";
