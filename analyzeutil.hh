@@ -38,8 +38,6 @@ struct public_stream_id {
     unsigned index{};
 };
 
-#define NS_PER_SEC 1000000000UL
-
 size_t memcheck() {
     rusage usage{};
     if (getrusage(RUSAGE_SELF, &usage) < 0) {

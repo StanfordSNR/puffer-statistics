@@ -36,6 +36,8 @@ using google::dense_hash_map;
  * Takes date as argument.
  */
 
+#define NS_PER_SEC 1000000000UL
+
 // if delimiter is at end, adds empty string to ret
 void split_on_char(const string_view str, const char ch_to_find, vector<string_view> & ret) {
     ret.clear();
@@ -79,7 +81,7 @@ uint64_t get_server_id(const vector<string_view> & fields) {
 /* Two datapoints are considered part of the same event (i.e. same Event struct) iff they share 
  * {timestamp, server, channel}. 
  * Two events with the same ts may come to a given server, so use channel to help
- * disambiguate (see 2019-04-30:2019-05-01). */
+ * disambiguate (see 2019-04-30:2019-05-01 1556622001697000000). */
 using event_table = map<uint64_t, Event>;
 using sysinfo_table = map<uint64_t, Sysinfo>;
 
@@ -553,7 +555,7 @@ class Parser {
                 if (found_disambiguous_stream == found_streams.end()) {
                     throw runtime_error( "Failed to find anonymized session/stream ID for init_id " 
                                           + to_string(stream_key.init_id) 
-                                          + " (ambiguous stream ID not found)" );
+                                          + " (disambiguous stream ID not found)" );
                 }
                 index = found_disambiguous_stream->index;
             }
@@ -678,8 +680,6 @@ class Parser {
                             throw runtime_error("incomplete video_acked with timestamp " + to_string(ts));
                         }
 
-                        // TODO: format of video_ts? Looks different than regular ts format, but 
-                        // same in video_acked and video_sent
                         optional<pair<public_session_id &, unsigned>> optl_public_id; 
                         try {
                             const auto & public_id = 

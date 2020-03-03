@@ -24,27 +24,28 @@ single_day_stats() {
     # pass top-level date to influx_inspect
     # echo "exporting and analyzing"
     
-    #echo "starting submission analyze"
-    influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
-        ~/puffer-statistics/submission_anon_analyze \
-        ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_submission_anon_stats.txt \
-        2> ${date}_submission_anon_err.txt
-   
     # Influx export => anonymized csv 
     #echo "starting private analyze" 
     influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
         ~/puffer-statistics/private_analyze $date 2> ${date}_private_analyze_err.txt 
-    #echo "finished private analyze"
+    #echo "finished private analyze for date " $date
     
     # Anonymized csv => stream-by-stream stats
     cat client_buffer_${date}.csv | ~/puffer-statistics/public_analyze \
         ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_public_analyze_stats.txt \
         2> ${date}_public_analyze_err.txt
     #echo "finished public analyze"
-    # clean up data and csvs (TODO: test only!), leave stats/err.txt
+    
+    #echo "starting submission analyze"
+    #influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
+        #~/puffer-statistics/submission_anon_analyze \
+        #~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_submission_anon_stats.txt \
+        #2> ${date}_submission_anon_err.txt
+   
+    # clean up data, leave stats/err.txt, csvs
     rm -rf ${date} 
     rm ${date}.tar.gz
-    rm *.csv
+    # rm *_${date}.csv
 
     # diff submission and new stats -- ignore tiny differences from float addition order
     # sort, since public analyze outputs in different order
@@ -52,11 +53,12 @@ single_day_stats() {
     for stats in "${stats[@]}"; do
         sort -o $stats $stats
         # set up for numdiff
-        sed -i 's/=/= /g' $stats
-        sed -i 's/%//g' $stats
+        # sed -i 's/=/= /g' $stats
+        # sed -i 's/%//g' $stats
     done
     # numdiff doesn't work with tail
-    numdiff -r 0.005 ${date}_submission_anon_stats.txt ${date}_public_analyze_stats.txt >> diffs.txt
+    # numdiff -r 0.005 ${date}_submission_anon_stats.txt ${date}_public_analyze_stats.txt >> diffs.txt
+    diff <(tail -n +3 ${date}_submission_anon_stats.txt) <(tail -n +3 ${date}_public_analyze_stats.txt) >> diffs.txt
 }
 
 if [ "$#" -lt 1 ]; then
