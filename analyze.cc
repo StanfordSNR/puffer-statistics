@@ -947,13 +947,13 @@ class Parser {
 
                 // ts from influx export include nanoseconds -- truncate to seconds
                 cout << "ts=" << (summary.base_time / 1000000000) 
-                     << " valid=" << (summary.valid ? "good " : "bad ") 
-                     << " full_extent=" << (summary.full_extent ? "full " : "trunc " ) 
-                     << " bad_reason=" << summary.bad_reason << " "
+                     << " valid=" << (summary.valid ? "good" : "bad") 
+                     << " full_extent=" << (summary.full_extent ? "full" : "trunc" ) 
+                     << " bad_reason=" << summary.bad_reason
                      << " scheme=" << summary.scheme 
                      << " ip=" << inet_ntoa({sysinfo.ip.value()})
                      << " os=" << ostable.reverse_map(sysinfo.os.value())
-                     << " channel_changes" << channel_changes 
+                     << " channel_changes=" << channel_changes 
                      << " init=" << summary.init_id 
                      << " extent=" << summary.time_extent
                      << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"

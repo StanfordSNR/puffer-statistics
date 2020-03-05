@@ -35,7 +35,8 @@ echo "finished pre_confinterval --build-schemedays-list"
 cat ../*stats.txt | ~/puffer-statistics/pre_confinterval $watch_times_out --build-watchtimes-list 2> $watch_times_err 
 echo "finished pre_confinterval --build-watchtimes-list"
 
-expts=("primary" "vintages" "current")    
+#expts=("primary" "vintages" "current")    
+expts=("primary")    # TODO
 
 for expt in ${expts[@]}; do
     intx_out="${expt}_intx_out.txt"
@@ -59,7 +60,8 @@ for expt in ${expts[@]}; do
     echo "finished pre_confinterval --intersect"
     
     # run confint using intersection; save output 
-    speeds=("all" "slow")  
+    #speeds=("all" "slow")  
+    speeds=("all")  # TODO
     for speed in ${speeds[@]}; do
         echo $expt
         echo $speed
