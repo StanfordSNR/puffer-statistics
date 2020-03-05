@@ -515,19 +515,18 @@ class Parser {
         // video_sent[server][channel] = map<ts, VideoSent>
         array<array<video_sent_table, Channel::COUNT>, SERVER_COUNT> video_sent{}; 
         
-        // sessions[session_key] = vec<[ts, Event]>
-        // note channel is part of the key, so "sessions" represents the paper's notion of "streams"
-        using session_key = tuple<uint32_t, uint32_t, uint32_t, uint8_t, uint8_t>;
+        // streams[stream_key] = vec<[ts, Event]>
+        using stream_key = tuple<uint32_t, uint32_t, uint32_t, uint8_t, uint8_t>;
         /*                        init_id,  uid,      expt_id,  server,  channel */
-        dense_hash_map<session_key, vector<pair<uint64_t, const Event*>>, boost::hash<session_key>> sessions;
+        dense_hash_map<stream_key, vector<pair<uint64_t, const Event*>>, boost::hash<stream_key>> streams;
 
         // sysinfos[sysinfo_key] = SysInfo
         using sysinfo_key = tuple<uint32_t, uint32_t, uint32_t>;
         /*                        init_id,  uid,      expt_id */
         dense_hash_map<sysinfo_key, Sysinfo, boost::hash<sysinfo_key>> sysinfos;
 
-        // chunks[session_key] = vec<[ts, VideoSent]>
-        dense_hash_map<session_key, vector<pair<uint64_t, const VideoSent*>>, boost::hash<session_key>> chunks;
+        // chunks[stream_key] = vec<[ts, VideoSent]>
+        dense_hash_map<stream_key, vector<pair<uint64_t, const VideoSent*>>, boost::hash<stream_key>> chunks;
 
         unsigned int bad_count = 0;
 
@@ -578,9 +577,9 @@ class Parser {
 
     public:
         Parser(const string & experiment_dump_filename, Day_ns start_ts)
-            : sessions(), sysinfos(), chunks()
+            : streams(), sysinfos(), chunks()
         {
-            sessions.set_empty_key({0,0,0,-1,-1});
+            streams.set_empty_key({0,0,0,-1,-1});
             sysinfos.set_empty_key({0,0,0});
             chunks.set_empty_key({0,0,0,-1,-1});
 
@@ -720,11 +719,11 @@ class Parser {
 
         /* Group Events by stream (key is {init_id, expt_id, user_id, server, channel}) 
          * Ignore "bad" Events (field was set multiple times), throw for "incomplete" Events (field was never set)
-         * Store in sessions, along with timestamp for each Event, ordered by increasing timestamp */
-        void accumulate_sessions() {
+         * Store in streams, along with timestamp for each Event, ordered by increasing timestamp */
+        void accumulate_streams() {
             for (uint8_t server = 0; server < client_buffer.size(); server++) {
                 const size_t rss = memcheck() / 1024;
-                cerr << "session_server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
+                cerr << "stream_server " << int(server) << "/" << client_buffer.size() << ", RSS=" << rss << " MiB\n";
                 for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
                     // iterates in increasing ts order
                     for (const auto & [ts,event] : client_buffer[server][channel]) {
@@ -737,7 +736,7 @@ class Parser {
                             throw runtime_error("incomplete event with timestamp " + to_string(ts));
                         }
 
-                        sessions[{*event.init_id, *event.user_id, *event.expt_id, server, channel}].emplace_back(ts, &event);
+                        streams[{*event.init_id, *event.user_id, *event.expt_id, server, channel}].emplace_back(ts, &event);
                     }
                 }
             }
@@ -826,9 +825,9 @@ class Parser {
         }
 
         void debug_print_grouped_data() {
-            cerr << "sessions:" << endl;
-            for ( const auto & [key, events] : sessions ) {
-                cerr << "session key: "; 
+            cerr << "streams:" << endl;
+            for ( const auto & [key, events] : streams ) {
+                cerr << "stream key: "; 
                 print(key);
                 for ( const auto & [ts, event] : events ) {
                     cerr << ts << ", " << *event; 
@@ -842,7 +841,7 @@ class Parser {
             }
             cerr << "chunks:" << endl;
             for ( const auto & [key, stream_chunks] : chunks ) {
-                cerr << "session key: "; 
+                cerr << "stream key: "; 
                 print(key);
                 for ( const auto & [ts, videosent] : stream_chunks ) {
                     cerr << ts << ", " << *videosent; 
@@ -869,13 +868,13 @@ class Parser {
         };
 
         /* Output a summary of each stream */
-        void analyze_sessions() const {
+        void analyze_streams() const {
             float total_time_after_startup=0;
             float total_stall_time=0;
             float total_extent=0;
 
             unsigned int had_stall=0;
-            unsigned int good_sessions=0;
+            unsigned int good_streams=0;
             unsigned int good_and_full=0;
 
             unsigned int missing_sysinfo = 0;
@@ -883,7 +882,7 @@ class Parser {
 
             size_t overall_chunks = 0, overall_high_ssim_chunks = 0, overall_ssim_1_chunks = 0;
 
-            for ( auto & [key, events] : sessions ) {
+            for ( auto & [key, events] : streams ) {
                 /* Find Sysinfo corresponding to this stream. */
                 /* Client increments init_id with each channel change.
                  * Before ~11/27/19: must decrement init_id until reaching the initial init_id
@@ -941,27 +940,36 @@ class Parser {
                     overall_ssim_1_chunks += ssim_1_chunks;
                 }
 
+                /* When changing the order/name of these fields, update pre_confinterval and confinterval
+                 * accordingly (they throw if field name mismatch). 
+                 * When changing the number of fields, update constant in watchtimesutil.hh */
                 cout << fixed;
 
                 // ts from influx export include nanoseconds -- truncate to seconds
-                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
-                    << summary.scheme << " " << inet_ntoa({sysinfo.ip.value()})
-                    << " " << ostable.reverse_map(sysinfo.os.value())
-                    << " " << channel_changes << " init=" << summary.init_id << " extent=" << summary.time_extent
-                    << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
-                    << " mean_ssim=" << mean_ssim
-                    << " mean_delivery_rate=" << mean_delivery_rate
-                    << " average_bitrate=" << average_bitrate
-                    << " ssim_variation_db=" << ssim_variation
-                    << " startup_delay=" << summary.cum_rebuf_at_startup
-                    << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
-                    << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
-                    << "\n";
+                cout << "ts=" << (summary.base_time / 1000000000) 
+                     << " valid=" << (summary.valid ? "good " : "bad ") 
+                     << " full_extent=" << (summary.full_extent ? "full " : "trunc " ) 
+                     << " bad_reason=" << summary.bad_reason << " "
+                     << " scheme=" << summary.scheme 
+                     << " ip=" << inet_ntoa({sysinfo.ip.value()})
+                     << " os=" << ostable.reverse_map(sysinfo.os.value())
+                     << " channel_changes" << channel_changes 
+                     << " init=" << summary.init_id 
+                     << " extent=" << summary.time_extent
+                     << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
+                     << " mean_ssim=" << mean_ssim
+                     << " mean_delivery_rate=" << mean_delivery_rate
+                     << " average_bitrate=" << average_bitrate
+                     << " ssim_variation_db=" << ssim_variation
+                     << " startup_delay=" << summary.cum_rebuf_at_startup
+                     << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
+                     << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
+                     << "\n";
 
                 total_extent += summary.time_extent;
 
                 if (summary.valid) {    // valid = "good"
-                    good_sessions++;
+                    good_streams++;
                     total_time_after_startup += (summary.time_at_last_play - summary.time_at_startup);
                     if (summary.cum_rebuf_at_last_play > summary.cum_rebuf_at_startup) {
                         had_stall++;
@@ -974,7 +982,7 @@ class Parser {
             }
 
             // mark summary lines with # so confinterval will ignore them
-            cout << "#num_sessions=" << sessions.size() << " good=" << good_sessions << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " missing_video_stats=" << missing_video_stats << " had_stall=" << had_stall 
+            cout << "#num_streams=" << streams.size() << " good=" << good_streams << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " missing_video_stats=" << missing_video_stats << " had_stall=" << had_stall 
                  << " overall_chunks=" << overall_chunks << " overall_high_ssim_chunks=" << overall_high_ssim_chunks 
                  << " overall_ssim_1_chunks=" << overall_ssim_1_chunks << " out_of_range_ts=" << n_bad_ts << "\n";
             cout << "#total_extent=" << total_extent / 3600.0 << " total_time_after_startup=" << total_time_after_startup / 3600.0 << " total_stall_time=" << total_stall_time / 3600.0 << "\n";
@@ -982,7 +990,7 @@ class Parser {
 
         /* Summarize a list of Videosents, ignoring SSIM ~ 1 */
         // normal_ssim_chunks, ssim_1_chunks, total_chunks, ssim_sum, mean_delivery_rate, average_bitrate, ssim_variation]
-        tuple<size_t, size_t, size_t, double, double, double, double> video_summarize(const session_key & key) const {
+        tuple<size_t, size_t, size_t, double, double, double, double> video_summarize(const stream_key & key) const {
             const auto videosent_it = chunks.find(key);
             if (videosent_it == chunks.end()) {
                 return { -1, -1, -1, -1, -1, -1, -1 };
@@ -1036,7 +1044,7 @@ class Parser {
         }
 
         /* Summarize a list of events corresponding to a stream. */
-        EventSummary summarize(const session_key & key, const vector<pair<uint64_t, const Event*>> & events) const {
+        EventSummary summarize(const stream_key & key, const vector<pair<uint64_t, const Event*>> & events) const {
             const auto & [init_id, uid, expt_id, server, channel] = key;
 
             EventSummary ret;
@@ -1165,10 +1173,10 @@ void analyze_main(const string & experiment_dump_filename, Day_ns start_ts) {
     Parser parser{ experiment_dump_filename, start_ts };
 
     parser.parse_stdin();
-    parser.accumulate_sessions();
+    parser.accumulate_streams();
     parser.accumulate_sysinfos();
     parser.accumulate_video_sents(); 
-    parser.analyze_sessions();
+    parser.analyze_streams();
 }
 
 /* Parse date to Unix timestamp (nanoseconds) at Influx backup hour, 
@@ -1183,7 +1191,16 @@ optional<Day_ns> parse_date(const string & date) {
     if (not strptime(strptime_str.str().c_str(), "%Y-%m-%d %H:%M:%S", &day_fields)) {
         return nullopt;
     }
+
+    // set timezone to UTC for mktime
+    char* tz = getenv("TZ");
+    setenv("TZ", "UTC", 1);
+    tzset();
+
     Day_ns start_ts = mktime(&day_fields) * NS_PER_SEC;
+
+    tz ? setenv("TZ", tz, 1) : unsetenv("TZ");
+    tzset();
     return start_ts;
 }
 

@@ -1,8 +1,8 @@
-#puffer_ttp_20190202/bbr considered 19534 sessions, stall/watch hours: 25.168/2534.327
-#puffer_ttp_20190302/bbr considered 19367 sessions, stall/watch hours: 36.647/2501.346
-#puffer_ttp_20190402/bbr considered 18074 sessions, stall/watch hours: 34.679/2529.444
-#puffer_ttp_20190502/bbr considered 19543 sessions, stall/watch hours: 27.860/2516.706
-#puffer_ttp_cl/bbr considered 19651 sessions, stall/watch hours: 36.167/2732.739
+#puffer_ttp_20190202/bbr considered 19534 streams, stall/watch hours: 25.168/2534.327
+#puffer_ttp_20190302/bbr considered 19367 streams, stall/watch hours: 36.647/2501.346
+#puffer_ttp_20190402/bbr considered 18074 streams, stall/watch hours: 34.679/2529.444
+#puffer_ttp_20190502/bbr considered 19543 streams, stall/watch hours: 27.860/2516.706
+#puffer_ttp_cl/bbr considered 19651 streams, stall/watch hours: 36.167/2732.739
 puffer_ttp_20190202/bbr stall ratio (95% CI): 0.91685084% .. 1.10959752%, mean= 1.01058982; SSIM (95% CI): 14.25232672 .. 14.53039472, mean= 14.38913560; SSIMvar (95% CI): 1.01426312 .. 1.04379472, mean= 1.02902892
 puffer_ttp_20190302/bbr stall ratio (95% CI): 1.33840871% .. 1.61395914%, mean= 1.47347982; SSIM (95% CI): 14.23439994 .. 14.53225628, mean= 14.38077509; SSIMvar (95% CI): 1.03126195 .. 1.06420703, mean= 1.04773449
 puffer_ttp_20190402/bbr stall ratio (95% CI): 1.30520259% .. 1.57858861%, mean= 1.43854803; SSIM (95% CI): 14.00725701 .. 14.29841679, mean= 14.15039737; SSIMvar (95% CI): 1.06103820 .. 1.09498816, mean= 1.07801318

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run schemedays and confint in provided directory containing analyze output; exit if dir does not exist 
+# Run pre_confinterval and confinterval in provided directory containing analyze output; exit if dir does not exist 
 
 set -e 
 
@@ -20,18 +20,20 @@ results_dir="results"
 mkdir $results_dir
 cd $results_dir
 
-# Output of schemedays --build-list, input of schemedays --intersect
-scheme_days_file="scheme_days.txt"
+# Output of pre_confinterval --build-schemedays-list, input of pre_confinterval --intersect
+scheme_days_out="scheme_days_out.txt"
 # Readable summary of days each scheme has run
-scheme_days_summary="scheme_days_summary.txt"
-# Output of schemedays --build-watchtimes-list, input of confinterval 
-watch_times_file="watch_times.txt"
+scheme_days_err="scheme_days_err.txt"
+# Output of pre_confinterval --build-watchtimes-list, input of confinterval 
+watch_times_out="watch_times_out.txt"
+watch_times_err="watch_times_err.txt"
 
 # build scheme days list
-cat ../*stats.txt | ~/puffer-statistics/schemedays $scheme_days_file --build-schemedays-list 2> $scheme_days_summary 
-echo "finished schemedays --build-schemedays-list"
-cat ../*stats.txt | ~/puffer-statistics/schemedays $watch_times_file --build-watchtimes-list 2> $scheme_days_summary 
-echo "finished schemedays --build-watchtimes-list"
+cat ../*stats.txt | ~/puffer-statistics/pre_confinterval $scheme_days_out --build-schemedays-list 2> $scheme_days_err 
+echo "finished pre_confinterval --build-schemedays-list"
+# build watch times lists
+cat ../*stats.txt | ~/puffer-statistics/pre_confinterval $watch_times_out --build-watchtimes-list 2> $watch_times_err 
+echo "finished pre_confinterval --build-watchtimes-list"
 
 expts=("primary" "vintages" "current")    
 
@@ -53,8 +55,8 @@ for expt in ${expts[@]}; do
     fi   
     
     # get intersection using scheme days list
-    ~/puffer-statistics/schemedays $scheme_days_file --intersect-schemes $schemes --intersect-outfile $intx_out 2> $intx_err
-    echo "finished schemedays --intersect"
+    ~/puffer-statistics/pre_confinterval $scheme_days_out --intersect-schemes $schemes --intersect-out $intx_out 2> $intx_err
+    echo "finished pre_confinterval --intersect"
     
     # run confint using intersection; save output 
     speeds=("all" "slow")  
@@ -67,7 +69,7 @@ for expt in ${expts[@]}; do
         d2g="${expt}_${speed}_data-to-gnuplot"
         
         cat ../*stats.txt | ~/puffer-statistics/confinterval --scheme-intersection $intx_out \
-            --session-speed $speed --watch-times $watch_times_file > $confint_out 2> $confint_err
+            --stream-speed $speed --watch-times $watch_times_out > $confint_out 2> $confint_err
         echo "finished confinterval"
         # Useful if there's a version of d2g for each expt/speed
         cat $confint_out | ~/puffer-statistics/plots/${d2g} | gnuplot > $plot 
