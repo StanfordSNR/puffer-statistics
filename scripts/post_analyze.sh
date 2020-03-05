@@ -16,7 +16,7 @@ if [ ! -d $1 ]; then
 fi
 
 pushd $1
-results_dir="results_deleteme"  # TODO!
+results_dir="results"  
 mkdir $results_dir
 cd $results_dir
 
@@ -35,8 +35,7 @@ echo "finished pre_confinterval --build-schemedays-list"
 cat ../*public_analyze_stats.txt | ~/puffer-statistics/pre_confinterval $watch_times_out --build-watchtimes-list 2> $watch_times_err 
 echo "finished pre_confinterval --build-watchtimes-list"
 
-#expts=("primary" "vintages" "current")    
-expts=("current")   # TODO! 
+expts=("primary" "vintages" "current")    
 
 for expt in ${expts[@]}; do
     intx_out="${expt}_intx_out.txt"
@@ -60,8 +59,7 @@ for expt in ${expts[@]}; do
     echo "finished pre_confinterval --intersect"
     
     # run confint using intersection; save output 
-    #speeds=("all" "slow")  
-    speeds=("slow")  # TODO!
+    speeds=("all" "slow")  
     for speed in ${speeds[@]}; do
         echo $expt
         echo $speed
