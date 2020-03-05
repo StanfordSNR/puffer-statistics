@@ -1,4 +1,4 @@
-/* Date utilities, useful for analyze/confinterval/schemedays. */
+/* Date utilities, useful for analyze/(pre)confinterval */
 
 #ifndef DATEUTIL_HH
 #define DATEUTIL_HH
@@ -18,7 +18,7 @@ static const unsigned BACKUP_HR = 11;
  * Given a set of Unix timestamps, prints contiguous intervals as nice strings. 
  * E.g. given {Jan 15, Jan 16, Jan 17, Jan 18, Feb 1, Feb 2, Feb 3},
  * print Jan 15 : Jan 18, Feb 1 : Feb 3.
- * Useful for schemedays and confinterval.
+ * Useful for (pre)confinterval.
  */
 void print_intervals(const std::set<uint64_t> & days) {
     struct tm ts_fields{};

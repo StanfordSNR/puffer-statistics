@@ -15,7 +15,7 @@
 #include <getopt.h>
 #include <cassert>
 #include "dateutil.hh"
-#include "watchtimesutil.hh"
+#include "confintutil.hh"
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -28,8 +28,8 @@ using namespace std::literals;
  * To stdout, outputs each scheme's mean stall ratio, SSIM, and SSIM variance,
  * along with confidence intervals. 
  * Takes as arguments the file containing desired schemes and the days they intersect 
- * (from schemedays --intersect-outfile), and the file containing watch times
- * (from schemedays --build-watchtimes-list)
+ * (from pre_confinterval --intersect-outfile), and the file containing watch times
+ * (from pre_confinterval --build-watchtimes-list)
  * Stall ratio is calculated over simulated samples;
  * SSIM/SSIMvar is calculated over real samples.
  */
@@ -215,7 +215,7 @@ struct SchemeStats {
 
 class Statistics {
     // list of watch times from which to sample
-    vector<double> all_watch_times{}; 
+    vector<double> watch_times{}; 
 
     /* Whenever a timestamp is used to represent a day, round down to Influx backup hour,
      * in seconds (analyze records ts as seconds) */
@@ -228,7 +228,8 @@ class Statistics {
     map<string, SchemeStats> scheme_stats{};
 
     public:     
-     Statistics (const string & intersection_filename, const string & watch_times_filename) {
+     Statistics (const string & intersection_filename, const string & watch_times_filename,
+                 const string & stream_speed) {
         vector<string> desired_schemes;
         /* Read file containing desired schemes, and list of days they intersect */
         read_intersection_file(intersection_filename, desired_schemes);
@@ -237,12 +238,11 @@ class Statistics {
             scheme_stats[scheme] = SchemeStats{};
         }
         /* Read file containing watch times */
-        read_watch_times_file(watch_times_filename);
+        read_watch_times_file(watch_times_filename, stream_speed);
     }
 
      void read_intersection_file(const string & intersection_filename, vector<string> & desired_schemes) {
-        ifstream intersection_file;
-        intersection_file.open(intersection_filename);
+        ifstream intersection_file{intersection_filename};
         if (not intersection_file.is_open()) {
             throw runtime_error( "can't open " + intersection_filename);
         }
@@ -276,28 +276,29 @@ class Statistics {
         print_intervals(acceptable_days);
      }
         
-     void read_watch_times_file(const string & watch_times_filename) {
-        ifstream watch_times_file;
-        watch_times_file.open(watch_times_filename);
+     void read_watch_times_file(const string & watch_times_filename,
+                                const string & stream_speed) {
+        const string & full_watch_times_filename = stream_speed + "_" + watch_times_filename;
+        ifstream watch_times_file{full_watch_times_filename};
         if (not watch_times_file.is_open()) {
-            throw runtime_error( "can't open " + watch_times_filename);
+            throw runtime_error( "can't open " + full_watch_times_filename);
         }
         string line_storage;
         double watch_time;
         if (!getline(watch_times_file, line_storage)) {
-            throw runtime_error("error reading " + watch_times_filename);
+            throw runtime_error("error reading " + full_watch_times_filename);
         }
         istringstream line(line_storage);
         while (line >> watch_time) {
-            all_watch_times.emplace_back(watch_time);
+            watch_times.emplace_back(watch_time);
         }
 
         watch_times_file.close();
         if (watch_times_file.bad()) {
-            throw runtime_error("error reading " + watch_times_filename);
+            throw runtime_error("error reading " + full_watch_times_filename);
         }
-        // shuffle all watch times before sampling
-        random_shuffle(all_watch_times.begin(), all_watch_times.end());
+        // shuffle watch times before sampling
+        random_shuffle(watch_times.begin(), watch_times.end());
      }
     
     /* Indicates whether ts is one of the acceptable days read
@@ -311,7 +312,7 @@ class Statistics {
      * ignoring stream if stream is bad/outside study period/short watch time.
      * Record all watch times independent of scheme. 
      * Record days each scheme was run, if desired. */
-    void parse_stdin(bool slow_sessions) {
+    void parse_stdin(const string & stream_speed) {
         ios::sync_with_stdio(false);
         string line_storage;
 
@@ -336,16 +337,17 @@ class Statistics {
                 continue;
             }
 
-            if (line.size() > 500) {
+            if (line.size() > MAX_LINE_LEN) {
                 throw runtime_error("Line " + to_string(line_no) + " too long");
             }
 
             split_on_char(line, ' ', fields);
-            if (fields.size() != 14) {
-                throw runtime_error("Bad line: " + line_storage);
+            if (fields.size() != N_STREAM_STATS) {
+                throw runtime_error("Line has " + to_string(fields.size()) + " fields, expected "
+                                    + to_string(N_STREAM_STATS) + ": " + line_storage);
             }
 
-            const auto & [ts_str, goodbad, fulltrunc, badreason, scheme, 
+            const auto & [timestamp, goodbad, fulltrunc, badreason, scheme, 
                   extent, usedpct, mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation_db,
                   startup_delay, time_after_startup,
                   time_stalled]
@@ -354,25 +356,30 @@ class Statistics {
                               fields[8], fields[9], fields[10], fields[11],
                               fields[12], fields[13]);
 
-            const uint64_t ts = to_uint64(ts_str);
+            split_on_char(timestamp, '=', scratch);
+            if (scratch[0] != "ts"sv) {
+                throw runtime_error("timestamp field mismatch");
+            }
+
+            const uint64_t ts = to_uint64(scratch[1]);
 
             if (not ts_is_acceptable(ts)) {
                 continue;
             } 
 
-            if (slow_sessions) {
+            if (stream_speed == "slow") {
                 split_on_char(mean_delivery_rate, '=', scratch);
                 if (scratch[0] != "mean_delivery_rate"sv) {
-                    throw runtime_error("field mismatch");
+                    throw runtime_error("delivery rate field mismatch");
                 }
-                const double delivery_rate = to_double(scratch[1]);
-                if (delivery_rate > (6000000.0/8.0)) {
+                const double delivery_rate = to_double(scratch[1]); 
+                if (not stream_is_slow(delivery_rate)) {
                     continue;
                 }
             }
             split_on_char(time_after_startup, '=', scratch);
             if (scratch[0] != "total_after_startup"sv) {
-                throw runtime_error("field mismatch");
+                throw runtime_error("watch time field mismatch");
             }
 
             const double watch_time = to_double(scratch[1]);
@@ -383,7 +390,7 @@ class Statistics {
 
             split_on_char(time_stalled, '=', scratch);
             if (scratch[0] != "stall_after_startup"sv) {
-                throw runtime_error("stall field mismatch");
+                throw runtime_error("stall time field mismatch");
             }
 
             const double stall_time = to_double(scratch[1]);
@@ -404,15 +411,28 @@ class Statistics {
 
             const double ssim_variation_db_val = to_double(scratch[1]);
             
+            split_on_char(goodbad, '=', scratch);
+            if (scratch[0] != "valid"sv) {
+                throw runtime_error("validity field mismatch");
+            }
+
+            string_view validity = scratch[1];
             // EXCLUDE BAD (but not trunc)
-            if (goodbad == "bad") {  
+            if (validity == "bad"sv) {  
                 continue;
             }
+            
+            split_on_char(scheme, '=', scratch);
+            if (scratch[0] != "scheme"sv) {
+                throw runtime_error("scheme field mismatch");
+            }
+
+            string_view schemesv = scratch[1];
 
             // Record stall ratio, ssim, ssim variation 
             // Ignore if not one of the requested schemes 
             SchemeStats *the_scheme = nullptr;
-            auto found_scheme = scheme_stats.find(string(scheme));
+            auto found_scheme = scheme_stats.find(string(schemesv));
             if (found_scheme != scheme_stats.end()) {
                 the_scheme = &found_scheme->second;
             }
@@ -432,12 +452,12 @@ class Statistics {
      * in the per-scheme stall ratio distribution
      * representing the input to analyze.
      */
-    static pair<double, double> simulate(const vector<double> & all_watch_times,
+    static pair<double, double> simulate(const vector<double> & watch_times,
                                          default_random_engine & prng,
                                          const SchemeStats & /* real */ scheme ) {
         /* step 1: draw a random watch time from static watch times samples */ 
-        uniform_int_distribution<> possible_watch_time_index(0, all_watch_times.size() - 1);
-        const double simulated_watch_time = all_watch_times.at(possible_watch_time_index(prng));
+        uniform_int_distribution<> possible_watch_time_index(0, watch_times.size() - 1);
+        const double simulated_watch_time = watch_times.at(possible_watch_time_index(prng));
 
         /* step 2: draw a stall ratio for the scheme from a similar observed watch time */
         unsigned int simulated_watch_time_binned = SchemeStats::watch_time_bin(simulated_watch_time);
@@ -481,13 +501,13 @@ class Statistics {
 
     /* For each sample in (real) scheme, take a simulated sample 
      * Return resulting simulated total stall ratio */
-    static double simulate_realization( const vector<double> & all_watch_times,
+    static double simulate_realization( const vector<double> & watch_times,
                                         default_random_engine & prng,
                                         const SchemeStats & /* real */scheme ) {
         SchemeStats scheme_simulated;
 
         for ( unsigned int i = 0; i < scheme.samples; i++ ) {
-            const auto [watch_time, stall_time] = simulate(all_watch_times, prng, scheme);
+            const auto [watch_time, stall_time] = simulate(watch_times, prng, scheme);
             scheme_simulated.add_sample(watch_time, stall_time);	    
         }
 
@@ -504,9 +524,9 @@ class Statistics {
         public:
         Realizations( const string & name, const SchemeStats & scheme_sample ) : _name(name), _scheme_sample(scheme_sample) {}
 
-        void add_realization( const vector<double> & all_watch_times, 
+        void add_realization( const vector<double> & watch_times, 
                               default_random_engine & prng ) {
-            _stall_ratios.push_back(simulate_realization(all_watch_times, prng, _scheme_sample));   // pass in real stats
+            _stall_ratios.push_back(simulate_realization(watch_times, prng, _scheme_sample));   // pass in real stats
         }
 
         // mean and 95% confidence interval of *simulated* stall ratios
@@ -524,7 +544,7 @@ class Statistics {
 
         void print_samplesize() const {
             cout << fixed << setprecision(3);
-            cout << "#" << _name << " considered " << _scheme_sample.samples << " sessions, stall/watch hours: " << _scheme_sample.total_stall_time / 3600.0 << "/" << _scheme_sample.total_watch_time / 3600.0 << "\n";
+            cout << "#" << _name << " considered " << _scheme_sample.samples << " streams, stall/watch hours: " << _scheme_sample.total_stall_time / 3600.0 << "/" << _scheme_sample.total_watch_time / 3600.0 << "\n";
         }
 
         void print_summary() {
@@ -560,7 +580,7 @@ class Statistics {
             }
 
             for (auto & realization : realizations) {
-                realization.add_realization(all_watch_times, prng);
+                realization.add_realization(watch_times, prng);
             }
         }
         cerr << "\n";
@@ -576,23 +596,22 @@ class Statistics {
 };
 
 void confint_main(const string & intersection_filename, const string & watch_times_filename,
-                  bool slow_sessions) {
-    Statistics stats {  intersection_filename, watch_times_filename };
-    stats.parse_stdin(slow_sessions);
+                  const string & stream_speed) {
+    Statistics stats {intersection_filename, watch_times_filename, stream_speed};
+    stats.parse_stdin(stream_speed);
     stats.do_point_estimate(); 
 }
 
-// TODO: update usage here if change name of schemedays program
 void print_usage(const string & program) {
     cerr << "Usage: " << program 
          << " --scheme-intersection <intersection_filename>"
-            " --session-speed <session_speed>"
-            " --watch-times <watch_times_filename>\n"
-            "intersection_filename: Output of schemedays --intersect-schemes --intersect-outfile, "
+            " --stream-speed <stream_speed>"
+            " --watch-times <watch_times_filename_postfix>\n"
+            "intersection_filename: Output of pre_confinterval --intersect-schemes --intersect-outfile, "
             "containing desired schemes and the days they intersect.\n"
-            "session_speed: slow or all\n"
-            "watch_times_filename: Output of schemedays --build-watch_times-list, "
-            "containing watch times.\n";
+            "stream-speed: slow or all\n"
+            "watch_times_filename_postfix: Output of pre_confinterval --build-watch_times-list, "
+            "containing watch times (specified stream_speed will be prepended).\n";
 }
 
 int main(int argc, char *argv[]) {
@@ -602,12 +621,12 @@ int main(int argc, char *argv[]) {
         }
         const option opts[] = {
             {"scheme-intersection", required_argument, nullptr, 'i'},
-            {"session-speed", required_argument, nullptr, 's'},
+            {"stream-speed", required_argument, nullptr, 's'},
             {"watch-times", required_argument, nullptr, 'w'},
             {nullptr, 0, nullptr, 0}
         };
         string intersection_filename, watch_times_filename;
-        string session_speed;
+        string stream_speed;
 
         while (true) {
             const int opt = getopt_long(argc, argv, "i:s:w:", opts, nullptr);
@@ -617,7 +636,7 @@ int main(int argc, char *argv[]) {
                     intersection_filename = optarg;
                     break;
                 case 's':
-                    session_speed = optarg;
+                    stream_speed = optarg;
                     break;
                 case 'w':
                     watch_times_filename = optarg;
@@ -633,14 +652,13 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         }
         if (intersection_filename.empty() or watch_times_filename.empty() or 
-                (session_speed != "slow" and session_speed != "all")) {
-            cerr << "Error: Scheme days file, watch time file, and session speed (slow or all) are required\n";
+                (stream_speed != "slow" and stream_speed != "all")) {
+            cerr << "Error: Scheme days file, watch time file, and stream speed (slow or all) are required\n";
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
 
-        bool slow_sessions = session_speed == "slow";
-        confint_main(intersection_filename, watch_times_filename, slow_sessions); 
+        confint_main(intersection_filename, watch_times_filename, stream_speed); 
         
     } catch (const exception & e) {
         cerr << e.what() << "\n";

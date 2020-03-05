@@ -321,9 +321,12 @@ class Parser {
                 cout << fixed;
 
                 // ts in anonymized data include nanoseconds -- truncate to seconds
-                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") 
-                     << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
-                     << summary.scheme << " extent=" << summary.time_extent
+                cout << "ts=" << (summary.base_time / 1000000000) 
+                     << " valid=" << (summary.valid ? "good " : "bad ") 
+                     << " full_extent=" << (summary.full_extent ? "full " : "trunc " ) 
+                     << " bad_reason=" << summary.bad_reason << " "
+                     << " scheme=" << summary.scheme 
+                     << " extent=" << summary.time_extent
                      << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
                      << " mean_ssim=" << mean_ssim
                      << " mean_delivery_rate=" << mean_delivery_rate
@@ -333,7 +336,6 @@ class Parser {
                      << " total_after_startup=" << (summary.time_at_last_play - summary.time_at_startup)
                      << " stall_after_startup=" << (summary.cum_rebuf_at_last_play - summary.cum_rebuf_at_startup) 
                      << "\n";
-
                 total_extent += summary.time_extent;
 
                 if (summary.valid) {    // valid = "good"

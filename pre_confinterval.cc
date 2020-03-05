@@ -16,7 +16,7 @@
 #include <cassert>
 #include <set>
 #include "dateutil.hh"
-#include "watchtimesutil.hh"
+#include "confintutil.hh"
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -29,7 +29,8 @@ using namespace std::literals;
  * Takes *one* of the following actions:
  * 1. Write a list of days each scheme has run (used to find intersection)
  * 2. Find the intersection of multiple schemes' days (used to determine the dates to analyze)
- * 3. Write a list of watchtimes (used to sample random watch times) */
+ * 3. Write two lists of watchtimes (used to sample random watch times), 
+ *    one for slow streams and one for all. */
 enum Action {NONE, SCHEMEDAYS_LIST, INTERSECT, WATCHTIMES_LIST};
 
 /* Whenever a timestamp is used to represent a day, round down to Influx backup hour,
@@ -112,6 +113,8 @@ class SchemeDays {
 
     /* Records all watch times, in order of input data. */
     vector<double> all_watch_times{}; 
+    /* Records slow-stream watch times, in order of input data. */
+    vector<double> slow_watch_times{}; 
 
     /* File storing scheme_days or watch_times */
     string list_filename;
@@ -137,7 +140,6 @@ class SchemeDays {
         unsigned int line_no = 0;
 
         vector<string_view> fields;
-        vector<string_view> scratch;
 
         while (cin.good()) {
             if (line_no % 1000000 == 0) {
@@ -155,53 +157,83 @@ class SchemeDays {
                 continue;
             }
 
-            if (line.size() > 500) {
+            if (line.size() > MAX_LINE_LEN) {
                 throw runtime_error("Line " + to_string(line_no) + " too long");
             }
 
             split_on_char(line, ' ', fields);
-            if (fields.size() != 14) {  // TODO: confinterval also uses this number
-                throw runtime_error("Bad line: " + line_storage);
+            if (fields.size() != N_STREAM_STATS) {  
+                throw runtime_error("Line has " + to_string(fields.size()) + " fields, expected "
+                                    + to_string(N_STREAM_STATS) + ": " + line_storage);
             }
 
-            string_view& ts_str = fields[0];
-            string_view& scheme = fields[4];
-            string_view& time_after_startup = fields[12];
-
-            const uint64_t ts = to_uint64(ts_str);
-            
-            split_on_char(time_after_startup, '=', scratch);
-            if (scratch[0] != "total_after_startup"sv) {
-                throw runtime_error("field mismatch");
-            }
-
-            const double watch_time = to_double(scratch[1]);
+            const auto & [timestamp, goodbad, fulltrunc, badreason, scheme, 
+                  extent, usedpct, mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation_db,
+                  startup_delay, time_after_startup,
+                  time_stalled]
+                      = tie(fields[0], fields[1], fields[2], fields[3],
+                              fields[4], fields[5], fields[6], fields[7],
+                              fields[8], fields[9], fields[10], fields[11],
+                              fields[12], fields[13]);
 
             if (action == SCHEMEDAYS_LIST) {
                 /* Record this stream's day for the corresponding scheme, 
                  * regardless of stream characteristics */
-                record_scheme_day(ts, string(scheme));
+                record_scheme_day(timestamp, scheme);
             } else if (action == WATCHTIMES_LIST) {
-                /* Record this stream's watch time in the corresponding bin
-                 * regardless of stream characteristics */
-                record_watch_time(watch_time);
+                /* Record this stream's watch time, 
+                 * regardless of stream characteristics except delivery rate */
+                record_watch_time(mean_delivery_rate, time_after_startup);
             }
         }   
     }
 
-    void record_watch_time(double watch_time) {
+    void record_watch_time(const string_view & mean_delivery_rate, 
+                           const string_view & time_after_startup) {
+        vector<string_view> scratch;
+        split_on_char(mean_delivery_rate, '=', scratch);
+        if (scratch[0] != "mean_delivery_rate"sv) {
+            throw runtime_error("delivery rate field mismatch");
+        }
+        const double delivery_rate = to_double(scratch[1]);
+
+        split_on_char(time_after_startup, '=', scratch);
+        if (scratch[0] != "total_after_startup"sv) {
+            throw runtime_error("watch time field mismatch");
+        }
+
+        const double watch_time = to_double(scratch[1]);
         if (watch_time < (1 << MIN_BIN) or watch_time > (1 << MAX_BIN)) {
             return;   // TODO: check this is what we want. Also, should we ignore wt > max in confint? rn, would throw
         }
+
         all_watch_times.push_back(watch_time);
+        if (stream_is_slow(delivery_rate)) {
+            slow_watch_times.push_back(watch_time);
+        }
     }
 
     /* Given the base timestamp and scheme of a stream, add 
      * corresponding day to the set of days the scheme was run.
      * Does not assume input data is sorted in any way. */ 
-    void record_scheme_day(uint64_t ts, const string & scheme) {
+    void record_scheme_day(const string_view & timestamp, 
+                           const string_view & scheme) {
+        vector<string_view> scratch;
+        split_on_char(timestamp, '=', scratch);
+        if (scratch[0] != "ts"sv) {
+            throw runtime_error("timestamp field mismatch");
+        }
+
+        const uint64_t ts = to_uint64(scratch[1]);
+
+        split_on_char(scheme, '=', scratch);
+        if (scratch[0] != "scheme"sv) {
+            throw runtime_error("scheme field mismatch");
+        }
+
+        string_view schemesv = scratch[1];
         Day_sec day = ts2Day_sec(ts);
-        scheme_days[scheme].emplace(day);
+        scheme_days[string(schemesv)].emplace(day);
     }
 
     /* Read scheme days from filename into scheme_days map */
@@ -232,8 +264,7 @@ class SchemeDays {
 
     /* Write map of scheme days to file */
     void write_scheme_days() {
-        ofstream list_file;
-        list_file.open(list_filename);
+        ofstream list_file {list_filename};
         if (not list_file.is_open()) {
             throw runtime_error( "can't open " + list_filename);
         }
@@ -252,20 +283,34 @@ class SchemeDays {
         }
     }
         
-    /* Write map of watch times to file */
+    /* Write map of watch times to slow and all files */
     void write_watch_times() {
-        ofstream list_file;
-        list_file.open(list_filename);
-        if (not list_file.is_open()) {
-            throw runtime_error( "can't open " + list_filename);
+        const string & all_full_filename = "all_" + list_filename;
+        const string & slow_full_filename = "slow_" + list_filename;
+        ofstream all_list_file{all_full_filename};
+        if (not all_list_file.is_open()) {
+            throw runtime_error( "can't open " + all_full_filename);
         }
+        ofstream slow_list_file{slow_full_filename};
+        if (not slow_list_file.is_open()) {
+            throw runtime_error( "can't open " + slow_full_filename);
+        }
+
         // file is single line of space-separated times
         for (const double watch_time : all_watch_times) {
-            list_file << watch_time << " ";
+            all_list_file << watch_time << " ";
         }
-        list_file.close();   
-        if (list_file.bad()) {
-            throw runtime_error("error writing " + list_filename);
+        for (const double slow_watch_time : slow_watch_times) {
+            slow_list_file << slow_watch_time << " ";
+        }
+
+        all_list_file.close();   
+        if (all_list_file.bad()) {
+            throw runtime_error("error writing " + all_full_filename);
+        }
+        slow_list_file.close();   
+        if (slow_list_file.bad()) {
+            throw runtime_error("error writing " + slow_full_filename);
         }
     }
 
@@ -357,11 +402,10 @@ void scheme_days_main(const string & list_filename, const string & desired_schem
         scheme_days.intersect(desired_schemes, intersection_filename);    
     } else if (action == WATCHTIMES_LIST) {
         /* Watch times map => watch times file */
-        // TODO: write two watch time files: one for slow
         scheme_days.write_watch_times(); 
     }
 }
-// TODO: rename program (reflect that it generates args to confinterval)
+
 void print_usage(const string & program) {
     cerr << "Usage: " << program << " <list_filename> <action>\n" 
          << "Action: One of\n" 
@@ -370,8 +414,8 @@ void print_usage(const string & program) {
          << "\t --intersect-schemes <schemes> --intersect-outfile <intersection_filename>: For the given schemes "
             "(i.e. primary, vintages, or comma-separated list e.g. mpc/bbr,puffer_ttp_cl/bbr), "
             "read from list_filename, and write to intersection_filename the schemes and intersecting days\n"
-         << "\t --build-watchtimes-list: Read analyze output from stdin, and write to list_filename "
-            "the binned watch times \n";
+         << "\t --build-watchtimes-list: Read analyze output from stdin, and write the watch times to "
+            "slow_list_filename and all_list_filename (separate file for slow streams)\n";
 }
 
 int main(int argc, char *argv[]) {
