@@ -1,6 +1,8 @@
 #!/bin/bash
 # For provided date ranges, grabs data from gs and runs analyze 
 # Assumed to already be in desired output directory (e.g. called by parallel wrapper)
+# Diffs results against the submission (submission_anon_analyze is the version of
+# analyze used in the submission, with non-anonymous output suppressed for comparison)
 set -e
 
 # For now, private and public in one script
@@ -36,11 +38,12 @@ single_day_stats() {
         2> ${date}_public_analyze_err.txt
     #echo "finished public analyze"
     
+    # Run submission version for comparison
     #echo "starting submission analyze"
-    #influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
-        #~/puffer-statistics/submission_anon_analyze \
-        #~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_submission_anon_stats.txt \
-        #2> ${date}_submission_anon_err.txt
+    influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
+        ~/puffer-statistics/submission_anon_analyze \
+        ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_submission_anon_stats.txt \
+        2> ${date}_submission_anon_err.txt
    
     # clean up data, leave stats/err.txt, csvs
     rm -rf ${date} 

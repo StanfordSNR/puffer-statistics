@@ -16,7 +16,7 @@ if [ ! -d $1 ]; then
 fi
 
 pushd $1
-results_dir="results"
+results_dir="results_deleteme"  # TODO!
 mkdir $results_dir
 cd $results_dir
 
@@ -29,13 +29,14 @@ watch_times_out="watch_times_out.txt"
 watch_times_err="watch_times_err.txt"
 
 # build scheme days list
-cat ../*stats.txt | ~/puffer-statistics/pre_confinterval $scheme_days_out --build-schemedays-list 2> $scheme_days_err 
+cat ../*public_analyze_stats.txt | ~/puffer-statistics/pre_confinterval $scheme_days_out --build-schemedays-list 2> $scheme_days_err 
 echo "finished pre_confinterval --build-schemedays-list"
 # build watch times lists
-cat ../*stats.txt | ~/puffer-statistics/pre_confinterval $watch_times_out --build-watchtimes-list 2> $watch_times_err 
+cat ../*public_analyze_stats.txt | ~/puffer-statistics/pre_confinterval $watch_times_out --build-watchtimes-list 2> $watch_times_err 
 echo "finished pre_confinterval --build-watchtimes-list"
 
-expts=("primary" "vintages" "current")    
+#expts=("primary" "vintages" "current")    
+expts=("current")   # TODO! 
 
 for expt in ${expts[@]}; do
     intx_out="${expt}_intx_out.txt"
@@ -59,7 +60,8 @@ for expt in ${expts[@]}; do
     echo "finished pre_confinterval --intersect"
     
     # run confint using intersection; save output 
-    speeds=("all" "slow")  
+    #speeds=("all" "slow")  
+    speeds=("slow")  # TODO!
     for speed in ${speeds[@]}; do
         echo $expt
         echo $speed
@@ -68,7 +70,7 @@ for expt in ${expts[@]}; do
         plot="${expt}_${speed}_plot.svg"
         d2g="${expt}_${speed}_data-to-gnuplot"
         
-        cat ../*stats.txt | ~/puffer-statistics/confinterval --scheme-intersection $intx_out \
+        cat ../*public_analyze_stats.txt | ~/puffer-statistics/confinterval --scheme-intersection $intx_out \
             --stream-speed $speed --watch-times $watch_times_out > $confint_out 2> $confint_err
         echo "finished confinterval"
         # Useful if there's a version of d2g for each expt/speed

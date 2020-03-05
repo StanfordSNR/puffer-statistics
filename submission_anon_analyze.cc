@@ -957,9 +957,12 @@ class Parser {
                 // ts from influx export include nanoseconds -- truncate to seconds
                 // cout all non-private values for comparison against 
                 // public version 
-                cout << (summary.base_time / 1000000000) << " " << (summary.valid ? "good " : "bad ") 
-                     << (summary.full_extent ? "full " : "trunc " ) << summary.bad_reason << " "
-                     << summary.scheme << " extent=" << summary.time_extent
+                cout << "ts=" << (summary.base_time / 1000000000) 
+                     << " valid=" << (summary.valid ? "good" : "bad") 
+                     << " full_extent=" << (summary.full_extent ? "full" : "trunc" ) 
+                     << " bad_reason=" << summary.bad_reason
+                     << " scheme=" << summary.scheme 
+                     << " extent=" << summary.time_extent
                      << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
                      << " mean_ssim=" << mean_ssim
                      << " mean_delivery_rate=" << mean_delivery_rate

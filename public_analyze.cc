@@ -322,9 +322,9 @@ class Parser {
 
                 // ts in anonymized data include nanoseconds -- truncate to seconds
                 cout << "ts=" << (summary.base_time / 1000000000) 
-                     << " valid=" << (summary.valid ? "good " : "bad ") 
-                     << " full_extent=" << (summary.full_extent ? "full " : "trunc " ) 
-                     << " bad_reason=" << summary.bad_reason << " "
+                     << " valid=" << (summary.valid ? "good" : "bad") 
+                     << " full_extent=" << (summary.full_extent ? "full" : "trunc" ) 
+                     << " bad_reason=" << summary.bad_reason
                      << " scheme=" << summary.scheme 
                      << " extent=" << summary.time_extent
                      << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
