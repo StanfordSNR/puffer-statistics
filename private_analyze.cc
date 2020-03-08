@@ -19,6 +19,8 @@
 
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <crypto++/base64.h>
+
 #include "dateutil.hh"
 #include "analyzeutil.hh"
 
@@ -37,6 +39,8 @@ using google::dense_hash_map;
  */
 
 #define NS_PER_SEC 1000000000UL
+// Bytes of random data used as public session ID after base64 encoding
+static constexpr unsigned BYTES_OF_ENTROPY = 32;
 
 // if delimiter is at end, adds empty string to ret
 void split_on_char(const string_view str, const char ch_to_find, vector<string_view> & ret) {
@@ -83,8 +87,9 @@ uint64_t get_server_id(const vector<string_view> & fields) {
  * Two events with the same ts may come to a given server, so use channel to help
  * disambiguate (see 2019-04-30:2019-05-01 1556622001697000000). */
 using event_table = map<uint64_t, Event>;
+/*                      timestamp */
 using sysinfo_table = map<uint64_t, Sysinfo>;
-
+/*                        timestamp */
 using video_sent_table = map<uint64_t, VideoSent>;
 /*                           timestamp */
 using video_acked_table = map<uint64_t, VideoAcked>;
@@ -140,7 +145,7 @@ struct stream_index {
 /* Session ID and list of *disambiguous* streams corresponding to a 
  * given *ambiguous* stream ID. */
 struct public_stream_ids_list {
-    public_session_id session_id{}; // random number (nullopt if not filled in yet)
+    string session_id{}; // random string
     /* This vector usually has one element, but if the server_id changes mid-session,
      * will contain an element for each server_id. */
     vector<stream_index> streams{};
@@ -149,10 +154,10 @@ struct public_stream_ids_list {
 using stream_ids_table = map<ambiguous_stream_id, public_stream_ids_list>;
 typedef map<ambiguous_stream_id, public_stream_ids_list>::iterator stream_ids_iterator;
 
-
 /* Whenever a timestamp is used to represent a day, round down to Influx backup hour.
  * Influx records ts as nanoseconds - use nanoseconds when writing ts to csv. */
 using Day_ns = uint64_t;
+
 class Parser {
     private:
         string_table usernames{};
@@ -357,21 +362,20 @@ class Parser {
             }
         }
 
-        /* Generate random session ID in place. */
+        /* Generate random base64-encoded session ID, insert to stream_ids. */
         void generate_session_id(public_stream_ids_list & public_ids_list) {
-            int entropy_ret = getentropy(public_ids_list.session_id.data(), BYTES_OF_ENTROPY);
+            uint8_t random_bytes[BYTES_OF_ENTROPY]; // avoid conflicting byte definitions
+            int entropy_ret = getentropy(random_bytes, BYTES_OF_ENTROPY);
             if (entropy_ret != 0) {
                 throw runtime_error(string("Failed to generate public session ID: ") + strerror(errno));
             }
-            for (char & c : public_ids_list.session_id) {
-                // XXX: hack to display special csv characters: comma, CR, LF, or double quote (RFC 4180)
-                switch (c) {
-                    case ',' : c = 'a'; break;
-                    case '\r': c = 'b'; break;
-                    case '\n': c = 'c'; break;
-                    case '\"': c = 'd'; break;
-                }
-            }
+            // encode as base64 in-place in stream_ids 
+            CryptoPP::StringSource ss(random_bytes, BYTES_OF_ENTROPY, true,
+                new CryptoPP::Base64Encoder(
+                    new CryptoPP::StringSink(public_ids_list.session_id),
+                    /* insertLineBreaks = */ false
+                ) 
+            ); 
         }
 
         /* Group client_buffer by user_id and first_init_id if available, 
@@ -502,7 +506,7 @@ class Parser {
         /* Useful for testing. Check that no two streams are assigned the same
          * {session_id, stream index} */
         void check_public_stream_id_uniqueness() const {
-            set<tuple<public_session_id, unsigned>> unique_public_stream_ids;
+            set<tuple<string, unsigned>> unique_public_stream_ids;
             for (const auto & [private_id, public_ids_list] : stream_ids) {
                 for (const auto & disambiguous_stream : public_ids_list.streams) {
                     bool duplicate = unique_public_stream_ids.count(
@@ -527,7 +531,7 @@ class Parser {
          * (by using video_sent as well as client_buffer to build stream_ids), 
          * but a video_sent with no corresponding 
          * client_buffer seems spurious, so ignore such chunks for now. */
-        const pair<public_session_id &, unsigned> get_anonymous_ids(const private_stream_key & stream_key) {
+        public_stream_id get_anonymous_ids(const private_stream_key & stream_key) {
             optional<uint32_t> first_init_id = stream_key.first_init_id;
             // Look up anonymous session/stream ID
             ambiguous_stream_id private_id = 
@@ -560,7 +564,6 @@ class Parser {
                 index = found_disambiguous_stream->index;
             }
 
-            // Return session_id by reference to avoid copy
             return {found_public_ids.session_id, index};
         }
         /* 
@@ -583,14 +586,15 @@ class Parser {
                         // already printed bad event info and threw for incomplete events when anonymizing
                         if (event.bad) continue;
                         // Don't catch -- see comment on get_anonymous_ids
-                        const auto & [session_id, index] = get_anonymous_ids({event.first_init_id, *event.init_id,
+                        public_stream_id public_id = get_anonymous_ids({event.first_init_id, *event.init_id,
                                 *event.user_id, *event.expt_id, server, channel});
-                        client_buffer_file << ts << ",";
-                        // write session_id as raw bytes
-                        client_buffer_file.write(session_id.data(), BYTES_OF_ENTROPY);
-                        client_buffer_file << "," << index
-                                           << "," << *event.expt_id << "," << channels.reverse_map(channel) 
-                                           << "," << string_view(*event.type) << "," << *event.buffer << "," 
+                        client_buffer_file << ts << "," 
+                                           << public_id.session_id << ","
+                                           << public_id.index << ","
+                                           << *event.expt_id << "," 
+                                           << channels.reverse_map(channel) << "," 
+                                           << string_view(*event.type) << "," 
+                                           << *event.buffer << "," 
                                            << *event.cum_rebuf << "\n";
                     }
                 }
@@ -627,22 +631,20 @@ class Parser {
 
                         const string & format_str = formats.reverse_map(*video_sent.format);
                         // catch -- see comment on get_anonymous_ids
-                        optional<pair<public_session_id &, unsigned>> optl_public_id; 
+                        public_stream_id public_id; 
                         try {
-                            const auto & public_id = 
+                            public_id = 
                                 get_anonymous_ids({video_sent.first_init_id, *video_sent.init_id,
                                     *video_sent.user_id, *video_sent.expt_id, server, channel});
-                            optl_public_id.emplace(public_id);
                         } catch (const exception & e) {
                             cerr << "Chunk with timestamp " << ts << " has no corresponding event: " 
                                  << e.what() << "\n";
                             continue;   // don't dump this chunk
                         }
-                        video_sent_file << ts << ",";
-                        // write session_id as raw bytes
-                        video_sent_file.write(optl_public_id.value().first.data(), BYTES_OF_ENTROPY);
-                        video_sent_file << "," << optl_public_id.value().second // index
-                                        << "," << *video_sent.expt_id << "," << channels.reverse_map(channel) << "," 
+                        video_sent_file << ts << ","
+                                        << public_id.session_id << ","
+                                        << public_id.index << ","
+                                        << *video_sent.expt_id << "," << channels.reverse_map(channel) << "," 
                                         << *video_sent.video_ts << "," << format_str << ","
                                         << *video_sent.size << "," << *video_sent.ssim_index << ","
                                         << *video_sent.cwnd << "," << *video_sent.in_flight << ","
@@ -657,7 +659,6 @@ class Parser {
                 throw runtime_error("error writing " + video_sent_filename);
             }
         }
-        
         void dump_anonymized_video_acked(const string & date_str) {
             // line format:
             // ts session_id index expt_id channel <video_acked fields>
@@ -680,23 +681,21 @@ class Parser {
                             throw runtime_error("incomplete video_acked with timestamp " + to_string(ts));
                         }
 
-                        optional<pair<public_session_id &, unsigned>> optl_public_id; 
+                        public_stream_id public_id; 
                         try {
-                            const auto & public_id = 
+                            public_id = 
                                 get_anonymous_ids({video_acked.first_init_id, *video_acked.init_id,
                                     *video_acked.user_id, *video_acked.expt_id, server, channel});
-                            optl_public_id.emplace(public_id);
                         } catch (const exception & e) {
                             cerr << "VideoAcked with timestamp " << ts << " has no corresponding event: " 
                                  << e.what() << "\n";
                             continue;   // don't dump this chunk
                         }
-                        video_acked_file << ts << ",";
-                        // write session_id as raw bytes
-                        video_acked_file.write(optl_public_id.value().first.data(), BYTES_OF_ENTROPY);
-                        video_acked_file << "," << optl_public_id.value().second // index
-                                         << "," << *video_acked.expt_id << "," << channels.reverse_map(channel) 
-                                         << "," << *video_acked.video_ts << "\n";
+                        video_acked_file << ts << ","
+                                         << public_id.session_id << ","
+                                         << public_id.index << ","
+                                         << *video_acked.expt_id << "," << channels.reverse_map(channel) << "," 
+                                         << *video_acked.video_ts << "\n";
                     }
                 }
             }
@@ -713,11 +712,12 @@ void private_analyze_main(const string & date_str, Day_ns start_ts) {
 
     parser.parse_stdin();
     parser.group_stream_ids();
-    parser.anonymize_stream_ids();
+    parser.anonymize_stream_ids(); 
+    // parser.check_public_stream_id_uniqueness(); // remove (test only)
     // use date_str to name csv
     parser.dump_anonymized_client_buffer(date_str); 
     parser.dump_anonymized_video_sent(date_str); 
-    parser.dump_anonymized_video_acked(date_str);
+    parser.dump_anonymized_video_acked(date_str); 
     // TODO: also dump sysinfo?
 }
 

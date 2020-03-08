@@ -7,7 +7,7 @@ parser_SOURCES = parser.cc
 parser_LDADD = $(jemalloc_LIBS)
 
 private_analyze_SOURCES = private_analyze.cc
-private_analyze_LDADD = $(jemalloc_LIBS)
+private_analyze_LDADD = $(jemalloc_LIBS) $(CRYPTO_LIBS)
 
 public_analyze_SOURCES = public_analyze.cc
 public_analyze_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)

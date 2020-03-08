@@ -53,8 +53,8 @@ class Parser {
         string_table formats{};
         
         // streams[public_stream_id] = vec<[ts, Event]>
-        using stream_key = tuple<public_session_id, unsigned>;   // unpack struct for hash
-        /*                                          index */
+        using stream_key = tuple<string, unsigned>;   // unpack struct for hash
+        /*                       session_id, index */
         dense_hash_map<stream_key, vector<pair<uint64_t, Event>>, boost::hash<stream_key>> streams;
 
         // sysinfos[sysinfo_key] = SysInfo
@@ -114,9 +114,9 @@ class Parser {
             : streams(), sysinfos(), chunks()
         {
             // TODO: check sysinfo empty key
-            streams.set_empty_key( {{0}, -1U} );    // we never insert a stream with index -1
+            streams.set_empty_key( {"", -1U} );    // we never insert a stream with index -1
             sysinfos.set_empty_key({0,0,0});
-            chunks.set_empty_key( {{0}, -1U} );    
+            chunks.set_empty_key( {"", -1U} );   
             formats.forward_map_vivify("unknown");
 
             read_experimental_settings_dump(experiment_dump_filename);
@@ -152,10 +152,8 @@ class Parser {
                 line_no++;
 
                 istringstream line(line_storage);
-                if (not (line >> ts >> comma and comma == ',' and                
-                         // read stream id as raw bytes
-                         line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and 
-                         line >> comma and comma == ',' and 
+                if (not (line >> ts >> comma and comma == ',' and  
+                         getline(line, stream_id.session_id, ',') and              
                          line >> stream_id.index >> comma and comma == ',' and 
                          line >> expt_id >> comma and comma == ',' and
                          getline(line, channel, ',') and getline(line, event_type_str, ',') and
@@ -167,7 +165,7 @@ class Parser {
                 Event event{nullopt, nullopt, expt_id, nullopt, string_view(event_type_str), 
                             buffer, cum_rebuf};
 
-                /* Add event to list of events corresponding to its stream */
+                // Add event to list of events corresponding to its stream 
                 streams[{stream_id.session_id, stream_id.index}].emplace_back(make_pair(ts, event));   // allocates event 
             } 
 
@@ -207,10 +205,8 @@ class Parser {
                 line_no++;
 
                 istringstream line(line_storage);
-                if (not (line >> ts >> comma and comma == ',' and                
-                         // read stream id as raw bytes
-                         line.read(stream_id.session_id.data(), BYTES_OF_ENTROPY) and 
-                         line >> comma and comma == ',' and 
+                if (not (line >> ts >> comma and comma == ',' and  
+                         getline(line, stream_id.session_id, ',') and              
                          line >> stream_id.index >> comma and comma == ',' and 
                          line >> expt_id >> comma and comma == ',' and
                          getline(line, channel, ',') and 
@@ -229,7 +225,7 @@ class Parser {
                 VideoSent video_sent{ssim_index = ssim_index, delivery_rate, expt_id, nullopt, nullopt, nullopt,
                     size, formats.forward_map_vivify(format), cwnd, in_flight, min_rtt, rtt, video_ts};
 
-                /* Add chunk to list of chunks corresponding to its stream */
+                // Add chunk to list of chunks corresponding to its stream 
                 chunks[{stream_id.session_id, stream_id.index}].emplace_back(make_pair(ts, video_sent));   
             } 
 
@@ -238,13 +234,12 @@ class Parser {
                 throw runtime_error("error writing " + video_sent_filename);
             }
         }
-       
+        
         void print_grouped_data() {
             cerr << "streams:" << endl;
             for ( const auto & [stream_id, events] : streams ) {
                 const auto & [session_id, index] = stream_id;
-                cerr << "public session ID (first two char): " << session_id[0] << session_id[1] << endl;
-                cerr << ", stream index: " << index << endl;
+                cerr << session_id << ", " << index << endl;
                 for ( const auto & [ts, event] : events ) {
                     cerr << ts << ", " << event; 
                 }
@@ -259,8 +254,7 @@ class Parser {
             cerr << "chunks:" << endl;
             for ( const auto & [stream_id, stream_chunks] : chunks ) {
                 const auto & [session_id, index] = stream_id;
-                cerr << "public session ID (first two char): " << session_id[0] << session_id[1] << endl;
-                cerr << ", stream index: " << index << endl;
+                cerr << session_id << ", " << index << endl;
                 for ( const auto & [ts, video_sent] : stream_chunks ) {
                     cerr << ts << ", " << video_sent; 
                 }
@@ -538,7 +532,7 @@ class Parser {
 
 void public_analyze_main(const string & experiment_dump_filename, const string & date_str) {
     Parser parser{experiment_dump_filename};
-    parser.parse_client_buffer_input(date_str);
+    parser.parse_client_buffer_input(date_str); 
     parser.parse_video_sent_input(date_str);
     parser.analyze_streams(); 
 }

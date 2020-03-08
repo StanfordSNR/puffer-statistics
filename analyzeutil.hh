@@ -22,14 +22,10 @@ using namespace std::literals;
 using google::sparse_hash_map;
 using google::dense_hash_map;
 
-static constexpr unsigned BYTES_OF_ENTROPY = 32;
-
-// 32-byte cryptographically secure random ID
-using public_session_id = array<char, BYTES_OF_ENTROPY>;
-
 // Uniquely and anonymously identifies a stream
 struct public_stream_id {
-    public_session_id session_id{};
+    // Base64-encoded 32-byte cryptographically secure random ID
+    string session_id{};
     
     /* Identifies a stream within a session (unique across streams in a session).
      * Used to group datapoints belonging to the same stream; not particularly

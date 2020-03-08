@@ -9,7 +9,7 @@ echo "deb https://repos.influxdata.com/${DISTRIB_ID,,} ${DISTRIB_CODENAME} stabl
 
 # get libs
 sudo apt-get update
-libs=("jemalloc" "jsoncpp" "sparsehash" "boost-all")
+libs=("jemalloc" "jsoncpp" "sparsehash" "boost-all" "crypto++")
 for lib in ${libs[@]}; do
     sudo apt-get install -y lib${lib}-dev
 done
