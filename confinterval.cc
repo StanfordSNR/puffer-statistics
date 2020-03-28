@@ -330,7 +330,7 @@ class Statistics {
     
     /* Indicates whether ts belongs to an "acceptable" day, 
      * i.e. a day listed in the intersection file
-     * and in range specified by the --days argument (if supplied) */
+     * and in INCLUSIVE range specified by the --days argument (if supplied) */
     bool ts_is_acceptable(uint64_t ts) {
         Day_sec day = ts2Day_sec(ts);
         bool in_arg_range = true;
@@ -338,6 +338,7 @@ class Statistics {
             in_arg_range = day >= days_from_arg.value().first and 
                            day <= days_from_arg.value().second;
         }
+        
         return days_from_intx.count(day) and in_arg_range;
     }
     
@@ -741,10 +742,10 @@ int main(int argc, char *argv[]) {
                         print_usage(argv[0]);
                         return EXIT_FAILURE;
                     }
-                    /* Make end_ts inclusive; e.g. if arg is 
-                     * 2019-07-01T11_2019-07-02T11:2019-07-04T11_2019-07-05T11, then
-                     * end_ts = 2019-07-05 11AM (not 2019-07-04 11AM) */
-                    days_from_arg = pair{start_ts.value(), end_ts.value() + 60 * 60 * 24};
+                    /* arg, start_ts and end_ts are all inclusive; e.g. if arg is 
+                     * 2019-07-01T11_2019-07-02T11:2019-07-01T11_2019-07-02T11 (i.e. a single day), then
+                     * start_ts = end_ts = 2019-07-01 11AM */
+                    days_from_arg = pair{start_ts.value(), end_ts.value()};
                     break; 
                     }
                 default:
