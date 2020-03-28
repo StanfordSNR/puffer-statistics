@@ -200,7 +200,7 @@ class Parser {
         
         unsigned int bad_count = 0;
         /* Timestamp range to be analyzed (influx export includes corrupt data outside the requested range).
-         * Any ts outside this range are rejected */
+         * Any ts outside this range (inclusive) are rejected */
         pair<Day_ns, Day_ns> days{};
         size_t n_bad_ts = 0;
 
@@ -721,31 +721,6 @@ void private_analyze_main(const string & date_str, Day_ns start_ts) {
     // TODO: also dump sysinfo?
 }
 
-/* Parse date to Unix timestamp (nanoseconds) at Influx backup hour, 
- * e.g. 2019-11-28T11_2019-11-29T11 => 1574938800000000000 (for 11AM UTC backup) */
-optional<Day_ns> parse_date(const string & date) {
-    const auto T_pos = date.find('T');
-    const string & start_day = date.substr(0, T_pos);
-
-    struct tm day_fields{};
-    ostringstream strptime_str;
-    strptime_str << start_day << " " << BACKUP_HR << ":00:00";
-    if (not strptime(strptime_str.str().c_str(), "%Y-%m-%d %H:%M:%S", &day_fields)) {
-        return nullopt;
-    }
-
-    // set timezone to UTC for mktime
-    char* tz = getenv("TZ");
-    setenv("TZ", "UTC", 1);
-    tzset();
-
-    Day_ns start_ts = mktime(&day_fields) * NS_PER_SEC;
-
-    tz ? setenv("TZ", tz, 1) : unsetenv("TZ");
-    tzset();
-    return start_ts;
-}
-
 /* Must take date as argument, to filter out extra data from influx export */
 int main(int argc, char *argv[]) {
     try {
@@ -758,13 +733,14 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         }
 
-        optional<Day_ns> start_ts = parse_date(argv[1]); 
+        optional<Day_sec> start_ts = str2Day_sec(argv[1]);
         if (not start_ts) {
             cerr << "Date argument could not be parsed; format as 2019-07-01T11_2019-07-02T11\n";
             return EXIT_FAILURE;
         }
         
-        private_analyze_main(argv[1], start_ts.value()); 
+         // convert start_ts to ns for comparison against Influx ts
+        private_analyze_main(argv[1], start_ts.value() * NS_PER_SEC);
     } catch (const exception & e) {
         cerr << e.what() << "\n";
         return EXIT_FAILURE;
