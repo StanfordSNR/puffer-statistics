@@ -1,14 +1,18 @@
 #!/bin/bash
 set -e
 
+# Usage:
+    # ./entrance.sh <day> <mode>
+    # day (mandatory): 2019-07-01T11_2019-07-02T11 or current
+        # current is current day, UTC
+    # mode (optional, defaults to public): private
+
 # For desired day:
     # Generate csvs and per-STREAM stats. 
-    # Desired day is optional argument to entrance program (format e.g. 2019-07-01T11_2019-07-02T11).
-        # Defaults to current day (UTC)
 # For desired day/week/two weeks/month (if data available on local or gs):
     # Generate per-SCHEME stats and plots.  
     # (Note this introduces a dependency across days, so be careful parallelizing)
-# Upload public data to gs.
+# Upload public data to gs (private mode only).
 
 # Preconditions: 
     # Dependencies installed
@@ -55,16 +59,28 @@ main() {
     # Just a log
     intx_err="intx_err.txt"
 
+    if [ "$#" -lt 1 ]; then
+        usage="Provide date to be analyzed: e.g. 2019-07-01T11_2019-07-02T11, or \"current\""
+        echo $usage
+        exit 1
+    fi
+    
     # Get date, formatted as 2019-07-01T11_2019-07-02T11
-    if [ "$#" -eq 1 ]; then
-        # TODO: check arg format
-        date="$1"
-    else 
+    # TODO: proper arg parsing
+    if [ "$1" == "current" ]; then 
         # current day is postfix of date string;
         # e.g. 2019-07-01T11_2019-07-02T11 backup is at 2019-07-02 11AM UTC
         local second_day=$(date -I --utc) 
         local first_day=$(date -I -d "$second_day - 1 day")
         date=${first_day}T11_${second_day}T11 
+    else 
+        date="$1"
+    fi
+
+    # Check for private mode
+    private=false
+    if [[ "$#" -eq 2 && "$2" == "private" ]]; then
+        private=true
     fi
 
     # First day in desired date; e.g. 2019-07-01 for 2019-07-01T11_2019-07-02T11
@@ -80,10 +96,15 @@ main() {
     mkdir "$local_data_path"/"$date" 
     pushd "$local_data_path"/"$date"
 
-    # Dump expt settings to local (will be uploaded to gs with the other data)
-    # Private only; for public, replace with download from gs
-    # Requires db key to be set
-    "$stats_repo_path"/experiments/dump-puffer-experiment > "$expt" 
+    # Get expt settings
+    if [ "$private" == "true" ]; then
+        # Private: Dump to local (will be uploaded to gs with the other data)
+            # Requires db key to be set
+        "$stats_repo_path"/experiments/dump-puffer-experiment > "$expt" 
+    else
+        # Public: Download settings from gs
+        gsutil cp "$data_bucket"/"$date"/"$expt" .
+    fi
     
     # Generate STREAM stats for desired day 
     single_day_stats 
@@ -95,37 +116,45 @@ main() {
     run_confinterval
 
     # Upload day's PUBLIC data to gs (private only)
-    # TODO: which files exactly do we want? 
-    # TODO: should public version of entrance be a separate file? 
-    to_upload=$(ls | grep -v *private*)
-    gsutil cp $to_upload "$data_bucket"/"$date" # don't quote $to_upload -- need the spaces
+    if [ "$private" == "true" ]; then
+        to_upload=$(ls | grep -v *private*)
+        gsutil cp $to_upload "$data_bucket"/"$date" # don't quote $to_upload -- need the spaces
+    fi
     
     popd
 }
-
-single_day_stats() { 
-    # 1. Download Influx export from gs (private only)
-    gsutil cp gs://puffer-influxdb-analytics/"$date".tar.gz . # exits if not found  
-    tar xf "$date".tar.gz
-    # Enter (temporary) data directory
-    # (pwd now: "$local_data_path"/"$date"/"$date") 
-    pushd "$date"
-    for f in *.tar.gz; do tar xf "$f"; done
-    popd
+ 
+single_day_stats() {
+    # 1. Get anonymized csv
+    if [ "$private" == "true" ]; then
+        # Private: Download Influx export from gs 
+        gsutil cp gs://puffer-influxdb-analytics/"$date".tar.gz . # exits if not found  
+        tar xf "$date".tar.gz
+        # Enter (temporary) data directory
+        # (pwd now: "$local_data_path"/"$date"/"$date") 
+        pushd "$date"
+        for f in *.tar.gz; do tar xf "$f"; done
+        popd
+        
+        # Private: Influx export => anonymized csv (private only)
+        # TODO: abort script if right side of pipe errors
+        influx_inspect export -datadir "$date" -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
+            "$stats_repo_path"/private_analyze "$date" 2> "$date"_private_analyze_err.txt 
     
-    # 2. Influx export => anonymized csv (private only)
-    # TODO: abort script if right side of pipe errors
-    influx_inspect export -datadir "$date" -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
-        "$stats_repo_path"/private_analyze "$date" 2> "$date"_private_analyze_err.txt 
-    
-    # 3. Anonymized csv => stream-by-stream stats
+        # Private: Clean up Influx data
+        if [ "$private" == "true" ]; then
+            rm -rf "$date" 
+            rm "$date".tar.gz
+        fi
+    else
+        # Public: Download csv from gs
+        gsutil cp "$data_bucket"/"$date"/*.csv .
+    fi
+        
+    # 2. Anonymized csv => stream-by-stream stats
     # TODO: Do we want date in (any of) the filenames, if both local and gs have a dir for each date?
     cat client_buffer_"$date".csv | "$stats_repo_path"/public_analyze \
         "$expt" "$date" > "$date"_public_analyze_stats.txt 2> "$date"_public_analyze_err.txt
-            
-    # Clean up data, leave stats/err.txt, csvs
-    rm -rf "$date" 
-    rm "$date".tar.gz
 }
 
 run_pre_confinterval() {
@@ -145,6 +174,7 @@ run_pre_confinterval() {
 
     # 2. Build scheme days list 
     # (input data must include all days to be plotted)
+    # TODO: replace all .. with enumerated filenames
     cat ../*/*public_analyze_stats.txt | "$stats_repo_path"/pre_confinterval \
         "$scheme_days_out" --build-schemedays-list 2>> "$scheme_days_err"
         # append to err from build-schemedays-list above
@@ -159,6 +189,7 @@ run_pre_confinterval() {
 # Given length of period, return first day in period
 # formatted as 2019-07-01T11_2019-07-02T11
 # e.g. date=2019-07-01T11_2019-07-02T11, length=2 => 2019-06-30T11_2019-07-01T11
+# e.g. date=2019-07-01T11_2019-07-02T11, length=1 => 2019-07-01T11_2019-07-02T11
 time_period_start() {
     let n_days_to_subtract="$1 - 1" 
     local first_day_prefix=$(date -I -d "$date_prefix - $n_days_to_subtract days")
@@ -186,6 +217,7 @@ period_avail() {
                 break
             else
                 # Past day is available in gs => download it
+                # TODO!!! Only need to copy stream stats, not the whole directory
                 gsutil cp -r "$data_bucket"/"$past_date" "$local_data_path"
             fi
         fi
@@ -218,7 +250,7 @@ run_confinterval() {
         local confint_out="${time_period}_confint_out.txt"
         local confint_err="${time_period}_confint_err.txt"
         local date_range=$(time_period_start "$ndays"):"$date"
-
+        
         # OK if local has stats out of desired range (either older or newer);
         # confint filters on range
         cat ../*/*public_analyze_stats.txt | "$stats_repo_path"/confinterval \
