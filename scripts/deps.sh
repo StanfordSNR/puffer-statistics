@@ -1,6 +1,6 @@
 #!/bin/bash
-# Installs dependencies for analyze and confinterval, 
-# clones and builds puffer-statistics (works for Ubuntu 19.04) 
+# Installs dependencies for analyze, preconfinterval, and confinterval 
+# Tested on Ubuntu 19.10
 
 # add InfluxData repo
 wget -qO- https://repos.influxdata.com/influxdb.key | sudo apt-key add -
@@ -14,18 +14,11 @@ for lib in ${libs[@]}; do
     sudo apt-get install -y lib${lib}-dev
 done
 
+# for Postgres connect (note PUFFER_PORTAL_DB_KEY is also required)
+sudo apt-get install -y libdbd-pg-perl 
+
 # get tools 
 tools=("influxdb" "gnuplot" "pkg-config") # pkg-config needed for configure
 for tool in ${tools[@]}; do
     sudo apt-get install -y $tool
 done
-
-# build
-git clone https://github.com/StanfordSNR/puffer-statistics.git 
-
-pushd puffer-statistics
-./autogen.sh
-./configure
-make
-
-popd
