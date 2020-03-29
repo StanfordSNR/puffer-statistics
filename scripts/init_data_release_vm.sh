@@ -25,7 +25,8 @@ scripts/deps.sh
 # 3. Build 
 ./autogen.sh
 ./configure
-make
+make -j$(nproc)
+sudo make install
 popd
 
 # 4. Create local directory for data
