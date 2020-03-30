@@ -66,7 +66,7 @@ main() {
     fi
     
     # Get date, formatted as 2019-07-01T11_2019-07-02T11
-    # TODO: proper arg parsing
+    # TODO: proper arg parsing...and error handling generally...
     if [ "$1" == "current" ]; then 
         # current day is postfix of date string;
         # e.g. 2019-07-01T11_2019-07-02T11 backup is at 2019-07-02 11AM UTC
@@ -172,14 +172,14 @@ run_pre_confinterval() {
     # Only needed to get desired schemes
     rm "$desired_schemes"
 
-    # 2. Build scheme days list 
+    # 2. Build scheme schedule
     # (input data must include all days to be plotted)
     # TODO: replace all .. with enumerated filenames
     cat ../*/*public_analyze_stats.txt | "$stats_repo_path"/pre_confinterval \
         "$scheme_days_out" --build-schemedays-list 2>> "$scheme_days_err"
         # append to err from build-schemedays-list above
 
-    # 3. Get intersection using scheme days list
+    # 3. Get intersection using scheme schedule
     # Note: confinterval ignores a day's data if the day is not in this list 
     # (meaning not all schemes ran that day)
     "$stats_repo_path"/pre_confinterval \
@@ -201,6 +201,7 @@ time_period_start() {
 # $1: number of days in time period (e.g. 7 for week)
 # Check if all data is available (either locally or in gs) for the period.
 # If data is in gs but not local, download it.
+# TODO: check local data integrity
 period_avail() {
     local avail=true
     local ndays=$1
@@ -217,7 +218,7 @@ period_avail() {
                 break
             else
                 # Past day is available in gs => download it
-                # TODO!!! Only need to copy stream stats, not the whole directory
+                # TODO: only need to copy stream stats, not the whole directory
                 gsutil cp -r "$data_bucket"/"$past_date" "$local_data_path"
             fi
         fi
@@ -260,7 +261,8 @@ run_confinterval() {
 
         local d2g="ssim_stall_to_gnuplot" # axes adjust automatically
         local plot="${time_period}_plot.svg"
-        # TODO: title plots
+        # TODO: title plots; make plotting script scheme-agnostic 
+        # (current version assumes Fugu/Pensieve[in-situ]/BBA)
         cat "$confint_out" | "$stats_repo_path"/plots/${d2g} | gnuplot > "$plot" 
     done
 }
