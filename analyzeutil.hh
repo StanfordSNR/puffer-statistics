@@ -22,6 +22,8 @@ using namespace std::literals;
 using google::sparse_hash_map;
 using google::dense_hash_map;
 
+#define VAR_NAME(var) (#var)
+
 // Uniquely and anonymously identifies a stream
 struct public_stream_id {
     // Base64-encoded 32-byte cryptographically secure random ID
@@ -175,6 +177,27 @@ struct Event {
     optional<float> buffer{};
     optional<float> cum_rebuf{};
 
+    // Comma-separated anonymous keys and values (to be dumped).
+    static string anon_keys() { 
+        // In CSV, type is called "event"
+        return "event" + string(",") + 
+               VAR_NAME(buffer) + "," +
+               VAR_NAME(cum_rebuf);
+    }
+    string anon_values() const { 
+        ostringstream values;
+        values << string_view(type.value()) << "," 
+               << buffer.value() << "," 
+               << cum_rebuf.value();
+        return values.str();
+
+    }
+    // Makes templatizing easier, and enforces that dump() calls the correct function
+    // Should only be called on complete datapoints
+    string anon_values(const string_table & formats __attribute((unused)) ) const { 
+        throw logic_error("Event does not use formats table to retrieve anonymous values");
+    }
+
     bool bad = false;
 
     // Event is "complete" and "good" if all mandatory fields are set exactly once
@@ -239,7 +262,7 @@ std::ostream& operator<< (std::ostream& out, const Event& s) {
         << "\n";
 }
 
-/*
+/* XXX: refactor so field names are easier to update
 BOOST_FUSION_ADAPT_STRUCT(Event, (optional<uint32_t>, first_init_id)(optional<uint32_t>, init_id)(optional<uint32_t>, expt_id)(optional<uint32_t>, user_id)(optional<Event::EventType>, type)(optional<float>, buffer)(optional<float>, cum_rebuf)(optional<string>, channel))
 */
     
@@ -338,6 +361,37 @@ struct VideoSent {
     format{}, cwnd{}, in_flight{}, min_rtt{}, rtt{};
     optional<uint64_t> video_ts{};
 
+    // Comma-separated anonymous keys and values (to be dumped).
+    static string anon_keys() { 
+        return VAR_NAME(video_ts) + string(",") + 
+               VAR_NAME(format) + "," +
+               VAR_NAME(size) + "," +
+               VAR_NAME(ssim_index) + "," +
+               VAR_NAME(cwnd) + "," +
+               VAR_NAME(in_flight) + "," +
+               VAR_NAME(min_rtt) + "," +
+               VAR_NAME(rtt) + "," +
+               VAR_NAME(delivery_rate);
+    }
+    // Makes templatizing easier, and enforces that dump() calls the correct function
+    string anon_values() const { 
+        throw logic_error("VideoSent requires formats table to retrieve anonymous values");
+    }
+    // Should only be called on complete datapoints
+    string anon_values(const string_table & formats) const { 
+        ostringstream values;
+        values << video_ts.value() << ","
+               << formats.reverse_map(format.value()) << ","
+               << size.value() << ","
+               << ssim_index.value() << ","
+               << cwnd.value() << ","
+               << in_flight.value() << ","
+               << min_rtt.value() << ","
+               << rtt.value() << ","
+               << delivery_rate.value();
+        return values.str();
+    }
+
     bool bad = false;
 
     bool complete() const {
@@ -371,9 +425,9 @@ struct VideoSent {
                 if (field.value() != value) {
                     if (not bad) {
                         bad = true;
-                        cerr << "error trying to set contradictory videosent value " << value <<
+                        cerr << "error trying to set contradictory VideoSent value " << value <<
                                 "(old value " << field.value() << ")\n";
-                        cerr << "Contradictory videosent:\n";
+                        cerr << "Contradictory VideoSent:\n";
                         cerr << *this; 
                     }
                     // throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
@@ -440,6 +494,21 @@ std::ostream& operator<< (std::ostream& out, const VideoSent& s) {
 struct VideoAcked {
     optional<uint32_t> expt_id{}, init_id{}, first_init_id{}, user_id{};
     optional<uint64_t> video_ts{};
+   
+    // Comma-separated anonymous keys and values (to be dumped)
+    static string anon_keys() { 
+        return VAR_NAME(video_ts);
+    }
+    // Should only be called on complete datapoints
+    string anon_values() const { 
+        ostringstream values;
+        values << video_ts.value();
+        return values.str();
+    }
+    // Makes templatizing easier, and enforces that dump() calls the correct function
+    string anon_values(const string_table & formats __attribute((unused)) ) const { 
+        throw logic_error("VideoAcked does not use formats table to retrieve anonymous values");
+    }
 
     bool bad = false;
 
@@ -507,7 +576,149 @@ std::ostream& operator<< (std::ostream& out, const VideoAcked& s) {
         << "\n";
 }
 
-// print a tuple of any size, promoting uint8_t
+struct VideoSize {
+    optional<uint64_t> video_ts{};
+    optional<uint32_t> size{};
+   
+    // Comma-separated anonymous keys and values (to be dumped)
+    static string anon_keys() { 
+        return VAR_NAME(video_ts) + string(",") + 
+               VAR_NAME(size);
+    }
+    // Should only be called on complete datapoints
+    string anon_values() const { 
+        ostringstream values;
+        values << video_ts.value() << ","
+               << size.value();
+        return values.str();
+    }
+    // Makes templatizing easier, and enforces that dump() calls the correct function
+    string anon_values(const string_table & formats __attribute((unused)) ) const { 
+        throw logic_error("VideoSize does not use formats table to retrieve anonymous values");
+    }
+
+    bool bad = false;
+
+    bool complete() const {
+        return video_ts and size; 
+    }
+
+    bool operator==(const VideoSize & other) const {
+        return video_ts == other.video_ts 
+            and size == other.size;
+    }
+
+    bool operator!=(const VideoSize & other) const { return not operator==(other); }
+
+    template <typename T>
+        void set_unique( optional<T> & field, const T & value ) {
+            if (not field.has_value()) {
+                field.emplace(value);
+            } else {
+                if (field.value() != value) {
+                    if (not bad) {
+                        bad = true;
+                        cerr << "error trying to set contradictory VideoSent value " << value <<
+                                "(old value " << field.value() << ")\n";
+                        cerr << "Contradictory VideoSent:\n";
+                        cerr << *this; 
+                    }
+                    // throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+                }
+            }
+        }
+
+    void insert_unique(const string_view key, const string_view value) {
+        /* For video_size and ssim measurements, presentation ts is called "timestamp"
+         * (not "video_ts" as in video_sent) */
+        if (key == "timestamp"sv) {
+            set_unique( video_ts, influx_integer<uint64_t>( value ) );
+        } else if (key == "size"sv) {
+            set_unique( size, influx_integer<uint32_t>( value ) );
+        } else {
+            throw runtime_error( "unknown key: " + string(key) );
+        }
+    }
+    friend std::ostream& operator<<(std::ostream& out, const VideoSize& s); 
+};
+std::ostream& operator<< (std::ostream& out, const VideoSize& s) {        
+    return out << "video_ts=" << s.video_ts.value_or(-1)
+        << ", size=" << s.size.value_or(-1)
+        << "\n";
+}
+
+struct SSIM {
+    optional<uint64_t> video_ts{};
+    optional<float> ssim_index{};
+    
+    // Comma-separated anonymous keys and values (to be dumped)
+    static string anon_keys() { 
+        return VAR_NAME(video_ts) + string(",") + 
+               VAR_NAME(ssim_index);
+    }
+    // Should only be called on complete datapoints
+    string anon_values() const { 
+        ostringstream values;
+        values << video_ts.value() << ","
+               << ssim_index.value();
+        return values.str();
+    }
+    // Makes templatizing easier, and enforces that dump() calls the correct function
+    string anon_values(const string_table & formats __attribute((unused)) ) const { 
+        throw logic_error("SSIM does not use formats table to retrieve anonymous values");
+    }
+
+    bool bad = false;
+
+    bool complete() const {
+        return video_ts and ssim_index; 
+    }
+
+    bool operator==(const SSIM & other) const {
+        return video_ts == other.video_ts 
+            and ssim_index == other.ssim_index;
+    }
+
+    bool operator!=(const SSIM & other) const { return not operator==(other); }
+
+    template <typename T>
+        void set_unique( optional<T> & field, const T & value ) {
+            if (not field.has_value()) {
+                field.emplace(value);
+            } else {
+                if (field.value() != value) {
+                    if (not bad) {
+                        bad = true;
+                        cerr << "error trying to set contradictory SSIM value " << value <<
+                                "(old value " << field.value() << ")\n";
+                        cerr << "Contradictory SSIM:\n";
+                        cerr << *this; 
+                    }
+                    // throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
+                }
+            }
+        }
+
+    void insert_unique(const string_view key, const string_view value) {
+        /* For video_size and ssim measurements, presentation ts is called "timestamp"
+         * (not "video_ts" as in video_sent) */
+        if (key == "timestamp"sv) {
+            set_unique( video_ts, influx_integer<uint64_t>( value ) );
+        } else if (key == "ssim_index"sv) {
+            set_unique( ssim_index, to_float(value) );
+        } else {
+            throw runtime_error( "unknown key: " + string(key) );
+        }
+    }
+    friend std::ostream& operator<<(std::ostream& out, const SSIM& s); 
+};
+std::ostream& operator<< (std::ostream& out, const SSIM& s) {        
+    return out << "video_ts=" << s.video_ts.value_or(-1)
+        << ", ssim_index=" << s.ssim_index.value_or(-1)
+        << "\n";
+}
+
+// print a tuple of any ssim_index, promoting uint8_t
 template<class Tuple, std::size_t N>
 struct TuplePrinter {
     static void print(const Tuple& t)
