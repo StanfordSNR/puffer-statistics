@@ -244,25 +244,36 @@ class Statistics {
                  const string & stream_speed, optional<pair<Day_sec, Day_sec>> days_from_arg) : 
         days_from_arg(days_from_arg) {
         vector<string> desired_schemes;
-        /* Read file containing desired schemes, and list of days they intersect */
+        
+        /* Read file containing desired schemes, and list of days they intersect.
+         * Populates days_from_intx */
         read_intersection_file(intersection_filename, desired_schemes);
-        // Initialize scheme_stats, so parse() knows the desired schemes
+       
+        /* Initialize scheme_stats, so parse() knows the desired schemes */
         for (const string & scheme : desired_schemes) {
             scheme_stats[scheme] = SchemeStats{};
         }
+       
         /* Read file containing watch times */
         read_watch_times_file(watch_times_filename, stream_speed);
         
-        // Log schemes and days for convenience
+        /* Log schemes and days for convenience */
         cerr << "Schemes:\n";
         for (const auto & desired_scheme : desired_schemes) {
             cerr << desired_scheme << " ";
         }
-        cerr << "\nDays from intersect-outfile:\n";  
+        cerr << "\n\nDays from scheme intersection:\n";  
         print_intervals(days_from_intx);
         if (days_from_arg) {
-            cerr << "\nDays from --days argument:\n"
-                 << days_from_arg.value().first << ":" << days_from_arg.value().second << "\n";
+            cerr << "\nDays from --days argument:\n";
+            set<Day_sec> days_from_arg_expanded;    // expand for print_intervals()
+            Day_sec cur = days_from_arg.value().first;
+            Day_sec last = days_from_arg.value().second;
+            while (cur <= last) {   // already checked that first <= last
+                days_from_arg_expanded.emplace(cur);
+                cur += 60 * 60 * 24;
+            }
+            print_intervals(days_from_arg_expanded);
         }
     }
 
@@ -738,7 +749,12 @@ int main(int argc, char *argv[]) {
                     optional<Day_sec> end_ts = str2Day_sec(end_day_str);
                     
                     if (not start_ts or not end_ts) {
-                        cerr << "Date argument could not be parsed\n";
+                        cerr << "Error: Date argument could not be parsed\n";
+                        print_usage(argv[0]);
+                        return EXIT_FAILURE;
+                    }
+                    if (end_ts.value() < start_ts.value()) {
+                        cerr << "Error: Date argument must be a valid range (end >= start)\n";
                         print_usage(argv[0]);
                         return EXIT_FAILURE;
                     }

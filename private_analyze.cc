@@ -9,9 +9,7 @@
 #include <map>
 #include <cstring>
 #include <fstream>
-#include <google/sparse_hash_map>
-#include <google/dense_hash_map>
-#include <boost/container_hash/hash.hpp>
+#include <unistd.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -26,8 +24,6 @@
 
 using namespace std;
 using namespace std::literals;
-using google::sparse_hash_map;
-using google::dense_hash_map;
 
 /** 
  * From stdin, parses influxDB export, which contains one line per key/value "measurement"
@@ -809,8 +805,8 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         }
         
-         // convert start_ts to ns for comparison against Influx ts
-        private_analyze_main(argv[1], start_ts.value() * NS_PER_SEC);
+        // convert start_ts to ns for comparison against Influx ts
+        private_analyze_main(argv[1], start_ts.value() * NS_PER_SEC); 
     } catch (const exception & e) {
         cerr << e.what() << "\n";
         return EXIT_FAILURE;

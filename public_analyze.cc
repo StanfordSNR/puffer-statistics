@@ -9,9 +9,7 @@
 #include <map>
 #include <cstring>
 #include <fstream>
-#include <google/sparse_hash_map>
-#include <google/dense_hash_map>
-#include <boost/container_hash/hash.hpp>
+#include <cmath>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -26,8 +24,6 @@
 
 using namespace std;
 using namespace std::literals;
-using google::sparse_hash_map;
-using google::dense_hash_map;
 
 /* 
  * Read in anonymized data (grouped by timestamp/server/channel), into data structures 
@@ -55,15 +51,15 @@ class Parser {
         // streams[public_stream_id] = vec<[ts, Event]>
         using stream_key = tuple<string, unsigned>;   // unpack struct for hash
         /*                       session_id, index */
-        dense_hash_map<stream_key, vector<pair<uint64_t, Event>>, boost::hash<stream_key>> streams;
+        map<stream_key, vector<pair<uint64_t, Event>>> streams;
 
         // sysinfos[sysinfo_key] = SysInfo
         using sysinfo_key = tuple<uint32_t, uint32_t, uint32_t>;
         /*                        init_id,  uid,      expt_id */
-        dense_hash_map<sysinfo_key, Sysinfo, boost::hash<sysinfo_key>> sysinfos;
+        map<sysinfo_key, Sysinfo> sysinfos;
 
         // chunks[public_stream_id] = vec<[ts, VideoSent]>
-        dense_hash_map<stream_key, vector<pair<uint64_t, const VideoSent>>, boost::hash<stream_key>> chunks;
+        map<stream_key, vector<pair<uint64_t, const VideoSent>>> chunks;
 
         unsigned int bad_count = 0;
         
@@ -113,10 +109,6 @@ class Parser {
         Parser(const string & experiment_dump_filename)
             : streams(), sysinfos(), chunks()
         {
-            // TODO: check sysinfo empty key
-            streams.set_empty_key( {"", -1U} );    // we never insert a stream with index -1
-            sysinfos.set_empty_key({0,0,0});
-            chunks.set_empty_key( {"", -1U} );   
             formats.forward_map_vivify("unknown");
 
             read_experimental_settings_dump(experiment_dump_filename);

@@ -6,6 +6,7 @@
 #include <set>
 #include <iostream>
 #include <string>
+#include <sstream>
 
 using std::cerr;    using std::string;  
 
@@ -23,11 +24,11 @@ static const unsigned BACKUP_HR = 11;
  */
 void print_intervals(const std::set<Day_sec> & days) {
     struct tm ts_fields{};
-    char day_str[80];
-    char prev_day_str[80];
+    char day_str[80] = {-1};
+    char prev_day_str[80] = {-1};
     uint64_t prev_day = -1;
 
-    for (const auto & day: days) {  // set is ordered
+    for (const Day_sec & day: days) {  // set is ordered
         // swap at beginning of loop iter so day_str is the current day at loop exit
         std::swap(prev_day_str, day_str);    
         time_t ts_raw = day;
@@ -35,24 +36,27 @@ void print_intervals(const std::set<Day_sec> & days) {
         ts_fields = *gmtime(&ts_raw);
         strftime(day_str, sizeof(day_str), "%Y-%m-%d", &ts_fields);
         if (difftime(day, prev_day) > 60 * 60 * 24) {
+            // end of previous interval
             if (prev_day != -1UL) { 
                 cerr << prev_day_str << "\n"; 
             }
+            // start of next interval
             cerr << day_str << " : ";
         }
         prev_day = day;
     }
-    // print end date
-    if (not days.empty()) {
+    // end of last interval
+    if (prev_day != -1UL) {
         cerr << day_str << "\n"; 
     }
 }
 
-/* Parse date string to Unix timestamp (seconds) at Influx backup hour, 
- * e.g. 2019-11-28T11_2019-11-29T11 => 1574938800 (for 11AM UTC backup)
- * Note expected format of date string. */
+/* Parse date string or prefix to
+ * Unix timestamp (seconds) at Influx backup hour, 
+ * e.g. 2019-11-28 or 2019-11-28T11_2019-11-29T11 => 1574938800 (for 11AM UTC backup) */
 std::optional<Day_sec> str2Day_sec(const string & date_str) {
     // TODO: check format
+    // If no T, takes entire string
     const auto T_pos = date_str.find('T');
     const string & start_day = date_str.substr(0, T_pos);
 

@@ -317,7 +317,7 @@ class SchemeDays {
     /* Human-readable summary of days each scheme ran 
      * (output file is not particularly fun to read). */
     void print_schemedays_summary() {
-        cerr << "In-memory scheme_days:\n";
+        cerr << "Scheme schedule:\n";
         for (const auto & [scheme, days] : scheme_days) {
             cerr << "\n" << scheme << "\n"; 
             print_intervals(days);
@@ -396,10 +396,11 @@ void scheme_days_main(const string & list_filename, const string & desired_schem
     if (action == SCHEMEDAYS_LIST) {
         /* Scheme days map => scheme days file */
         scheme_days.write_scheme_days(); 
-        scheme_days.print_schemedays_summary();    
     } else if (action == INTERSECT) {
         /* Desired schemes, scheme days file => intersecting days */
         scheme_days.intersect(desired_schemes, intersection_filename);    
+        // print here since --list is called twice in entrance program
+        scheme_days.print_schemedays_summary();    
     } else if (action == WATCHTIMES_LIST) {
         /* Watch times map => watch times file */
         scheme_days.write_watch_times(); 
