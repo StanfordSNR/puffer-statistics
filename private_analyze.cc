@@ -26,11 +26,12 @@ using namespace std;
 using namespace std::literals;
 
 /** 
- * From stdin, parses influxDB export, which contains one line per key/value "measurement"
- * (e.g. cum_rebuf) collected with a given timestamp, server, and channel. 
- * For each measurement type in {client_buffer, video_sent, video_acked},
- * outputs a csv containing one line per "datapoint" (i.e. all measurements collected 
- * with a given timestamp, server, and channel).
+ * From stdin, parses influxDB export, which contains one line per key/value field
+ * (e.g. cum_rebuf), along with the tags corresponding to that field 
+ * (e.g. timestamp, server, and channel).
+ * For each measurement type (e.g. client_buffer), 
+ * outputs a csv containing one line per "datapoint", i.e. all fields recorded 
+ * with a given set of tags (e.g. a single Event).
  * Takes date as argument.
  */
 
@@ -787,6 +788,12 @@ void private_analyze_main(const string & date_str, Day_ns start_ts) {
     // TODO: also dump sysinfo?
 }
 
+void consume_cin() {
+    ios::sync_with_stdio(false); 
+    string line_storage;
+    while (cin.good()) { getline(cin, line_storage); }
+}
+
 /* Must take date as argument, to filter out extra data from influx export */
 int main(int argc, char *argv[]) {
     try {
@@ -796,21 +803,24 @@ int main(int argc, char *argv[]) {
 
         if (argc != 2) {
             cerr << "Usage: " << argv[0] << " date [e.g. 2019-07-01T11_2019-07-02T11]\n";
+            consume_cin();
             return EXIT_FAILURE;
         }
 
         optional<Day_sec> start_ts = str2Day_sec(argv[1]);
         if (not start_ts) {
             cerr << "Date argument could not be parsed; format as 2019-07-01T11_2019-07-02T11\n";
+            consume_cin();
             return EXIT_FAILURE;
         }
-        
+
         // convert start_ts to ns for comparison against Influx ts
         private_analyze_main(argv[1], start_ts.value() * NS_PER_SEC); 
     } catch (const exception & e) {
         cerr << e.what() << "\n";
+        consume_cin();
         return EXIT_FAILURE;
     }
-
+    consume_cin();
     return EXIT_SUCCESS;
 }

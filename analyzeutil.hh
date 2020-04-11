@@ -10,6 +10,8 @@
 #include <charconv>
 #include <cstring>
 #include <fstream>
+#include <google/sparse_hash_map>
+#include <google/dense_hash_map>
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -17,6 +19,8 @@
 // #include <boost/fusion/include/for_each.hpp>
 using namespace std;
 using namespace std::literals;
+using google::sparse_hash_map;
+using google::dense_hash_map;
 
 #define VAR_NAME(var) (#var)
 
@@ -96,11 +100,13 @@ T influx_integer(const string_view str) {
 class string_table {
     uint32_t next_id_ = 0;
 
-    map<string, uint32_t> forward_{};
-    map<uint32_t, string> reverse_{};
+    dense_hash_map<string, uint32_t> forward_{};
+    dense_hash_map<uint32_t, string> reverse_{};
 
     public:
     string_table() {
+        forward_.set_empty_key({});
+        reverse_.set_empty_key(-1);
     }
 
     /* Return map[key], inserting if necessary. */
