@@ -1,26 +1,17 @@
-#!/bin/bash
+#!/bin/bash -ue
 
-set -e
-
-# Prepare a fresh VM to run the entrance program.
-
-# Preconditions:
-    # Static watch time lists in gs 
-    # (For now, uploaded from machine with submission stats;
-    # alternative is to analyze full study period on this machine)
-    
-data_bucket=gs://puffer-stanford-public/data-release-test
+# Prepare a fresh VM to run the statistics programs.
+# Creates local data directory with watch times, in pwd.
 
 # 1. Clone puffer-statistics/data-release 
-# (XXX: make repo and data dir configurable; ~ for now)
-pushd ~
 
 git clone https://github.com/StanfordSNR/puffer-statistics.git 
 pushd puffer-statistics
 git checkout data-release   # TODO: this may change
 
-# 2. Install dependencies
+# 2. Install dependencies, set constants and paths used below
 scripts/deps.sh
+source scripts/export_constants.sh "$PWD"
 
 # 3. Build 
 ./autogen.sh
@@ -30,13 +21,12 @@ sudo make install
 popd
 
 # 4. Create local directory for data
-mkdir data-release-test   
-pushd data-release-test
+mkdir "$LOCAL_DATA_PATH"
+pushd "$LOCAL_DATA_PATH"
 
 # 5. Download static watch time lists from gs (to be used for all days)
-gsutil cp "$data_bucket"/*watch_times_out.txt .
+gsutil cp -q "$DATA_BUCKET"/*"$WATCH_TIMES_POSTFIX" .
 
 # 6. (Private only) Set up environment for Postgres connection 
 
 popd
-popd 
