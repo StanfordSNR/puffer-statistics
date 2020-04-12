@@ -134,8 +134,8 @@ scheme_stats() {
         if ! ls "${period_stream_stats_files[@]:0:$ndays}" &> /dev/null; then
             echo "Skipping time period $time_period with insufficient data available"
             # Skip time period if not all stream stats available.
-            # No further periods can be complete, since they include this one.
-            break
+            # Order of iteration over time_periods is unpredictable -- next period may be ok
+            continue
         fi
 
         local confint_out=${time_period}_scheme_stats_"$END_DATE".txt
