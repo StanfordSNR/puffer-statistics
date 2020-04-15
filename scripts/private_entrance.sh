@@ -11,6 +11,8 @@ clean_up_err() {
     exit 1 
 }
 
+# Avoid hang if logs directory not created yet
+mkdir -p "$LOCAL_DATA_PATH"/"$END_DATE"/"$LOGS"
 cd "$LOCAL_DATA_PATH"/"$END_DATE" 
 
 # 1. Dump and upload expt settings (requires db key to be set)
@@ -39,11 +41,6 @@ for f in *.tar.gz; do tar xf "$f"; done
 popd > /dev/null
 
 # Influx export => anonymized csv 
-if [ ! -d "$LOGS" ]; then
-    # Avoid hang if logs directory not created
-    >&2 echo "Error: Local logs directory does not exist (should be created by get_month_stream_stats)" 
-    exit 1 
-fi
 
 # Subshell running private_analyze creates this file to signal failure
 rm -f private_analyze_failed    

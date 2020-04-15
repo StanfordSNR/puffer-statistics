@@ -1,5 +1,6 @@
 #!/bin/bash -ue
 
+# For desired day: generate per-STREAM stats.
 # For desired day/week/two weeks/month (if prereq files and data available locally):
     # Generate per-SCHEME stats and plots.  
     # (Note this introduces a dependency across days, so be careful parallelizing)
@@ -10,8 +11,11 @@ main() {
     
     cd "$LOCAL_DATA_PATH"/"$END_DATE"
     
-    # 1. Get filenames of stream stats over longest period (month)
-    # 1a. Get dates
+    # 1. Generate STREAM stats for desired day 
+    stream_stats
+    
+    # 2. Get filenames of stream stats over longest period (month)
+    # 2a. Get dates
     unset period_dates
     MONTH_LEN=30
     readarray -t period_dates < <("$STATS_REPO_PATH"/scripts/list_period_dates.sh "$END_DATE" "$MONTH_LEN") 
@@ -20,16 +24,13 @@ main() {
         exit 1
     fi
 
-    # 1b. Map dates to filenames
+    # 2b. Map dates to filenames
     declare -a period_stream_stats_files
     for i in ${!period_dates[@]}; do
         period_date="${period_dates[$i]}"
         stream_stats_file="$LOCAL_DATA_PATH"/"$period_date"/${STREAM_STATS_PREFIX}_"$period_date".txt
         period_stream_stats_files[$i]="$stream_stats_file"
     done
-    
-    # 2. Generate STREAM stats for desired day 
-    stream_stats
     
     # 3. Prerequisites for per-scheme analysis
     run_pre_confinterval
