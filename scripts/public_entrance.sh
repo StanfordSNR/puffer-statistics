@@ -9,27 +9,29 @@ main() {
     # List of days all requested schemes were run
     readonly scheme_intersection="$LOGS"/scheme_intersection_"$END_DATE".txt
     
-    cd "$LOCAL_DATA_PATH"/"$END_DATE"
+    # Avoid hang if logs directory not created yet/deleted
+    mkdir -p "$LOCAL_DATA_PATH"/"$END_DATE"/"$LOGS" 
+    cd "$LOCAL_DATA_PATH"/"$END_DATE" 
     
     # 1. Generate STREAM stats for desired day 
-    stream_stats
+    stream_stats  
     
     # 2. Get filenames of stream stats over longest period (month)
     # 2a. Get dates
-    unset period_dates
+    unset month_dates
     MONTH_LEN=30
-    readarray -t period_dates < <("$STATS_REPO_PATH"/scripts/list_period_dates.sh "$END_DATE" "$MONTH_LEN") 
-    if [ "${#period_dates[@]}" -ne "$MONTH_LEN" ]; then
-        >&2 echo "Error enumerating month dates before generating daily stream stats"
+    readarray -t month_dates < <("$STATS_REPO_PATH"/scripts/list_period_dates.sh "$END_DATE" "$MONTH_LEN") 
+    if [ "${#month_dates[@]}" -ne "$MONTH_LEN" ]; then
+        >&2 echo "Error enumerating month dates before generating daily stream stats ($END_DATE)"
         exit 1
     fi
 
-    # 2b. Map dates to filenames
-    declare -a period_stream_stats_files
-    for i in ${!period_dates[@]}; do
-        period_date="${period_dates[$i]}"
+    # 2b. Map dates to filenames, for convenience
+    declare -a month_stream_stats_files
+    for i in ${!month_dates[@]}; do
+        period_date="${month_dates[$i]}"
         stream_stats_file="$LOCAL_DATA_PATH"/"$period_date"/${STREAM_STATS_PREFIX}_"$period_date".txt
-        period_stream_stats_files[$i]="$stream_stats_file"
+        month_stream_stats_files[$i]="$stream_stats_file"
     done
     
     # 3. Prerequisites for per-scheme analysis
@@ -51,7 +53,7 @@ stream_stats() {
         # Clean up any partial stream stats
         rm -f ${STREAM_STATS_PREFIX}_"$END_DATE".txt
        
-        >&2 echo "Error generating stream stats from CSVs; see $public_analyze_err"
+        >&2 echo "Error generating stream stats from CSVs ($END_DATE)"
         exit 1
     fi
 }
@@ -78,7 +80,8 @@ run_pre_confinterval() {
              "$desired_schemes" --build-schemedays-list \
              < ${STREAM_STATS_PREFIX}_"$END_DATE".txt 2> "$pretty_day_scheme_schedule"; then
         
-        >&2 echo "Error determining day's schemes; see $pretty_day_scheme_schedule"
+        >&2 echo "Error determining day's schemes ($END_DATE); pre_confinterval exited unsuccessfully \
+                  or never started (see $pretty_day_scheme_schedule)"
         rm -f "$desired_schemes"
         exit 1
     fi
@@ -95,12 +98,13 @@ run_pre_confinterval() {
     # the longest period to be analyzed (here, month)
 
     set +o pipefail # ignore errors from missing files
-    if ! cat "${period_stream_stats_files[@]}" 2> /dev/null |
+    if ! cat "${month_stream_stats_files[@]}" 2> /dev/null |
             "$STATS_REPO_PATH"/pre_confinterval \
             "$month_scheme_schedule" --build-schemedays-list \
             2> "$pretty_month_scheme_schedule"; then
              
-        >&2 echo "Error building scheme schedule; see $pretty_month_scheme_schedule"
+        >&2 echo "Error building scheme schedule ($END_DATE); pre_confinterval exited unsuccessfully \
+                  or never started (see $pretty_month_scheme_schedule)"
         rm -f "$month_scheme_schedule"
         exit 1
     fi
@@ -114,58 +118,89 @@ run_pre_confinterval() {
             --intersect-out "$scheme_intersection" \
             2> "$intx_err"; then
 
-        >&2 echo "Error generating scheme intersection; see $intx_err" 
+        >&2 echo "Error generating scheme intersection ($END_DATE); pre_confinterval exited unsuccessfully \
+                  or never started (see $intx_err)" 
         rm -f "$scheme_intersection" 
         exit 1
     fi
 }
 
 scheme_stats() {
-    # TODO: all speeds only for now 
-    
-    declare -A time_periods # days per period
+    # days per period
+    declare -A time_periods 
     time_periods[day]=1 
     time_periods[week]=7 
     time_periods[two_weeks]=14 
     time_periods[month]=30 
-    
-    # For each time_period with ALL data available locally: Calculate scheme stats and plot
+
+    # Read scheme intersection file into convenient format
+    unset scheme_intx_ts
+    readarray -t -d ' ' scheme_intx_ts < <(tail "$scheme_intersection" -n +2)
+    unset scheme_intx_ts[${#scheme_intx_ts[@]}-1] # strip empty element
+    declare -a scheme_intx_strings
+    for i in ${!scheme_intx_ts[@]}; do
+        # 11am ts => day string e.g. 2020-02-02
+        local ts=${scheme_intx_ts[$i]}
+        local day_str_prefix=$(date -I --date=@$ts --utc)
+        local day_str_postfix=$(date -I -d "$day_str_prefix + 1 day")
+        # Timestamps in file are sorted in increasing order, filenames we'll compare to are decreasing
+        scheme_intx_strings[((${#scheme_intx_ts[@]}-$i-1))]=${day_str_prefix}T11_${day_str_postfix}T11 
+    done 
+
+    # For each time_period: Calculate scheme stats and plot (or skip period)
     for time_period in ${!time_periods[@]}; do
+        # Order of iteration over time_periods is unpredictable -- next period may be shorter
         local ndays="${time_periods["$time_period"]}"
-        if ! ls "${period_stream_stats_files[@]:0:$ndays}" &> /dev/null; then
-            echo "Skipping time period $time_period with insufficient data available"
-            # Skip time period if not all stream stats available.
-            # Order of iteration over time_periods is unpredictable -- next period may be ok
+        
+        # 1. Skip time period if not all stream stats available
+        if ! ls "${month_stream_stats_files[@]:0:$ndays}" &> /dev/null; then
+            echo "Skipping time period $time_period (ending $END_DATE) with insufficient stream stats available"
             continue
         fi
-
-        local confint_out=${time_period}_scheme_stats_"$END_DATE".txt
-        local confint_err="$LOGS"/${time_period}_confint_err_"$END_DATE".txt
-
-        if ! cat "${period_stream_stats_files[@]:0:$ndays}" |
-            "$STATS_REPO_PATH"/confinterval \
-            --scheme-intersection "$scheme_intersection" \
-            --stream-speed all \
-            --watch-times "$LOCAL_DATA_PATH"/"$WATCH_TIMES_POSTFIX" \
-            > "$confint_out" 2> "$confint_err"; then
-            
-            >&2 echo "Error generating scheme statistics; see $confint_err" 
-            rm -f "$confint_out"
-            exit 1
-        fi
-
-        # TODO: title plots
-            # Including dates? (confinterval silently ignores days on which not all schemes ran)
         
-        # TODO: make plotting script scheme-agnostic 
-            # (current version assumes Fugu[Feb]/Pensieve[in-situ]/BBA)
-        local plot=${time_period}_plot_"$END_DATE".svg
-        set -o pipefail 
-        if ! cat "$confint_out" | "$STATS_REPO_PATH"/plots/ssim_stall_to_gnuplot | gnuplot > "$plot"; then
-            >&2 echo "Error plotting" 
-            rm -f "$plot" 
-            exit 1
-        fi
+        # 2. Skip time period if not all schemes ran every day 
+        local period_dates=${month_dates[@]:0:$ndays} 
+        if [[ "${scheme_intx_strings[*]}" != *"$period_dates"* ]]; then
+            echo "Skipping time period $time_period (ending $END_DATE) during which not all schemes ran daily"
+            continue 
+        fi 
+
+        # Date of earliest day in period 
+        local period_start_inclusive=${month_dates[(($ndays-1))]}
+        
+        speeds=("all" "slow")  
+        for speed in ${speeds[@]}; do
+            local confint_out=${time_period}_${speed}_scheme_stats_"$END_DATE".txt
+            local scheme_stats_err="$LOGS"/${time_period}_${speed}_scheme_stats_err_"$END_DATE".txt
+
+            if ! cat "${month_stream_stats_files[@]:0:$ndays}" |
+                "$STATS_REPO_PATH"/confinterval \
+                --scheme-intersection "$scheme_intersection" \
+                --stream-speed "$speed" \
+                --watch-times "$LOCAL_DATA_PATH"/"$WATCH_TIMES_POSTFIX" \
+                > "$confint_out" 2> "$scheme_stats_err"; then
+                
+                >&2 echo "Error generating scheme statistics ($END_DATE); confinterval exited unsuccessfully \
+                          or never started (see $scheme_stats_err)" 
+                rm -f "$confint_out"
+                exit 1
+            fi
+
+            local plot=${time_period}_${speed}_plot_"$END_DATE".svg
+            if [ $ndays -eq 1 ]; then
+                local plot_title="$speed speeds, $END_DATE (UTC)"
+            else
+                local plot_title="$speed speeds, $period_start_inclusive : $END_DATE (UTC)"
+            fi
+
+            if ! "$STATS_REPO_PATH"/plots/scheme_stats_to_plot.py \
+                --title "$plot_title" --input_data "$confint_out" --output_figure "$plot" \
+                2> "$scheme_stats_err"; then
+                >&2 echo "Error plotting ($END_DATE); see $scheme_stats_err" 
+                rm -f "$plot" 
+                exit 1
+            fi
+        done
     done
 }
 

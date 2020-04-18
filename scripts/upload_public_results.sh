@@ -10,9 +10,8 @@ gsutil cp $public_logs "$DATA_BUCKET"/"$END_DATE"/"$LOGS"
 
 # All private files should be cleaned up by now,
 # but enumerate public files just in case
-# TODO: add back non-// stuff
-#public_results="${STREAM_STATS_PREFIX}* *scheme_stats* *.svg"
-#gsutil -q cp $public_results "$DATA_BUCKET"/"$END_DATE" # don't quote $public_results -- need the spaces
+public_results="${STREAM_STATS_PREFIX}* *scheme_stats* *.svg"
+gsutil -q cp $public_results "$DATA_BUCKET"/"$END_DATE" # don't quote $public_results -- need the spaces
 
 # Delete local data now that it's in gs, except stream stats
-rm -r $(ls "$LOCAL_DATA_PATH"/"$END_DATE" | grep -v "${STREAM_STATS_PREFIX}*")
+rm -r $(ls | grep -v "${STREAM_STATS_PREFIX}*")
