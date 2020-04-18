@@ -18,14 +18,14 @@ cd "$LOCAL_DATA_PATH"/"$END_DATE"
 # 1. Dump and upload expt settings (requires db key to be set)
 if ! "$STATS_REPO_PATH"/experiments/dump-puffer-experiment > "$EXPT"; then 
     rm -f "$EXPT" 
-    >&2 echo "Error dumping experiment settings"
+    >&2 echo "Error dumping experiment settings ($END_DATE)"
     exit 1 
 fi
 
 if ! gsutil -q cp "$EXPT" "$DATA_BUCKET"/"$END_DATE"/"$EXPT"; then
     # Clean up any partially uploaded file (ignore exit status)
     gsutil -q rm "$DATA_BUCKET"/"$END_DATE"/"$EXPT" 2> /dev/null || true
-    >&2 echo "Error uploading experiment settings"
+    >&2 echo "Error uploading experiment settings ($END_DATE)"
     exit 1 
 fi
 
@@ -52,11 +52,11 @@ influx_inspect export -datadir "$END_DATE" -waldir /dev/null -out /dev/fd/3 3>&1
     { tail > /dev/null; touch private_analyze_failed; }) 
 
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-    >&2 echo "Error: Influx export failed" 
+    >&2 echo "Error: Influx export failed ($END_DATE)" 
     clean_up_err # exits, in case more functionality is added below
 fi 
 if [ -f private_analyze_failed ]; then
-    >&2 echo "Error: Private analyze exited unsuccessfully or never started; see $private_analyze_err"
+    >&2 echo "Error: Private analyze exited unsuccessfully or never started ($END_DATE)"
     clean_up_err
 fi
 
@@ -68,6 +68,6 @@ rm "$END_DATE".tar.gz
 if ! gsutil -q cp *.csv "$DATA_BUCKET"/"$END_DATE"; then
     # Clean up any partially uploaded file (ignore exit status)
     gsutil -q rm "$DATA_BUCKET"/"$END_DATE"/*.csv 2> /dev/null || true
-    >&2 echo "Error uploading CSVs"
+    >&2 echo "Error uploading CSVs ($END_DATE)"
     exit 1 
 fi
