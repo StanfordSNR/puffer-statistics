@@ -50,7 +50,7 @@ else
     END_DATE=""
 fi
 # Absolute path to local dir containing each day's data 
-LOCAL_DATA_PATH="$1"/data-release
+LOCAL_DATA_PATH="$1"/puffer-data-release
 # Absolute path to local puffer-statistics repo 
 STATS_REPO_PATH="$1"/puffer-statistics 
 # Directory name for daily metadata, error logs 
@@ -59,7 +59,7 @@ LOGS=logs
 # Experimental settings dump file
 EXPT="$LOGS"/expt_settings
 # Google Cloud Storage bucket for data
-DATA_BUCKET=gs://puffer-stanford-public/data-release
+DATA_BUCKET=gs://puffer-data-release
 # Prefix used to identify a stream stats file from any day
 STREAM_STATS_PREFIX=stream_stats
 # Postfix used to identify watch times files
