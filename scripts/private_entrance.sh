@@ -42,20 +42,20 @@ popd > /dev/null
 
 # Influx export => anonymized csv 
 
-# Subshell running private_analyze creates this file to signal failure
-rm -f private_analyze_failed    
-readonly private_analyze_err="$LOGS"/private_analyze_err_"$END_DATE".txt
-# If private_analyze never starts, tail in subshell consumes export.
+# Subshell running influx_to_csv creates this file to signal failure
+rm -f influx_to_csv_failed    
+readonly influx_to_csv_err="$LOGS"/influx_to_csv_err_"$END_DATE".txt
+# If influx_to_csv never starts, tail in subshell consumes export.
 # Otherwise, pipeline hangs - note both tail and parens are necessary to avoid hang
 influx_inspect export -datadir "$END_DATE" -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
-    ("$STATS_REPO_PATH"/private_analyze "$END_DATE" 2> "$private_analyze_err" || \
-    { tail > /dev/null; touch private_analyze_failed; }) 
+    ("$STATS_REPO_PATH"/influx_to_csv "$END_DATE" 2> "$influx_to_csv_err" || \
+    { tail > /dev/null; touch influx_to_csv_failed; }) 
 
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     >&2 echo "Error: Influx export failed ($END_DATE)" 
     clean_up_err # exits, in case more functionality is added below
 fi 
-if [ -f private_analyze_failed ]; then
+if [ -f influx_to_csv_failed ]; then
     >&2 echo "Error: Private analyze exited unsuccessfully or never started ($END_DATE)"
     clean_up_err
 fi

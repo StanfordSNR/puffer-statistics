@@ -3,9 +3,9 @@
 # Upload day's results to gs (expt settings and CSVs were already uploaded)
 cd "$LOCAL_DATA_PATH"/"$END_DATE"
 
-# Upload logs except private_analyze_err and expt settings
+# Upload logs except private err and expt settings
 # (TODO: update if private filename changes)
-public_logs=$(ls -d logs/* | grep -v "private" | grep -v "$EXPT")
+public_logs=$(ls -d logs/* | grep -v "influx" | grep -v "$EXPT")
 gsutil cp $public_logs "$DATA_BUCKET"/"$END_DATE"/"$LOGS"
 
 # All private files should be cleaned up by now,

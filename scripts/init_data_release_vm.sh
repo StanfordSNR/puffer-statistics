@@ -6,7 +6,6 @@
 # 1. Clone puffer-statistics/data-release 
 git clone https://github.com/StanfordSNR/puffer-statistics.git 
 pushd puffer-statistics
-git checkout data-release   # TODO: this may change
 
 # 2. Install dependencies
 scripts/deps.sh

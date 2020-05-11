@@ -1,21 +1,22 @@
 AM_CPPFLAGS = $(CXX17_FLAGS) $(jemalloc_CFLAGS) $(jsoncpp_CFLAGS)
 AM_CXXFLAGS = $(PICKY_CXXFLAGS)
 
-bin_PROGRAMS = parser private_analyze public_analyze submission_anon_analyze pre_confinterval confinterval 
+bin_PROGRAMS = influx_to_csv csv_to_stream_stats stream_to_scheme_stats stream_stats_to_metadata \
+			   parser submission_anon_analyze
+
+influx_to_csv_SOURCES = influx_to_csv.cc
+influx_to_csv_LDADD = $(jemalloc_LIBS) $(CRYPTO_LIBS)
+
+csv_to_stream_stats_SOURCES = csv_to_stream_stats.cc
+csv_to_stream_stats_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)
+
+stream_to_scheme_stats_SOURCES = stream_to_scheme_stats.cc
+stream_to_scheme_stats_LDADD = $(jemalloc_LIBS)
+
+stream_stats_to_metadata_SOURCES = stream_stats_to_metadata.cc
 
 parser_SOURCES = parser.cc
 parser_LDADD = $(jemalloc_LIBS)
 
-private_analyze_SOURCES = private_analyze.cc
-private_analyze_LDADD = $(jemalloc_LIBS) $(CRYPTO_LIBS)
-
-public_analyze_SOURCES = public_analyze.cc
-public_analyze_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)
-
 submission_anon_analyze_SOURCES = submission_anon_analyze.cc
 submission_anon_analyze_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)
-
-pre_confinterval_SOURCES = pre_confinterval.cc
-
-confinterval_SOURCES = confinterval.cc
-confinterval_LDADD = $(jemalloc_LIBS)

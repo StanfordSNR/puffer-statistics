@@ -5,6 +5,8 @@
         # jemalloc package may not have a .pc file for pkg-config
         # boost include: container_hash => functional
         # g++8 for charconv
+        
+# TODO: add matplotlib, python3
 
 # (private only) add InfluxData repo
 wget -qO- https://repos.influxdata.com/influxdb.key | sudo apt-key add -

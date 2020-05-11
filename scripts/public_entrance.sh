@@ -9,7 +9,7 @@ main() {
     # List of contiguous days on which all requested schemes ran, ending in END_DATE.
     # Note: All time periods can use the same scheme intersection
     # (time period only needs to be a subset of scheme intersection).
-    # The stream stats input to confinterval contain exactly the desired time period,
+    # The stream stats input to stream_to_scheme_stats contain exactly the desired time period,
     # so any days in scheme schedule outside the period are not considered when calculating scheme stats.
     readonly duration_scheme_intersection="$LOGS"/duration_scheme_intersection_"$END_DATE".txt
     
@@ -23,20 +23,20 @@ main() {
     stream_stats
     
     # 2. Prerequisites for per-scheme analysis
-    run_pre_confinterval
+    metadata
 
     # 3. Generate SCHEME stats/plots for desired day, week, two weeks, month 
     scheme_stats
 }
 
 stream_stats() {
-    readonly public_analyze_err="$LOGS"/public_analyze_err_"$END_DATE".txt
+    readonly csv_to_stream_stats_err="$LOGS"/csv_to_stream_stats_err_"$END_DATE".txt
     # Anonymized CSVs => stream-by-stream stats
-    # public_analyze opens the CSVs itself
-    if ! "$STATS_REPO_PATH"/public_analyze \
+    # csv_to_stream_stats opens the CSVs itself
+    if ! "$STATS_REPO_PATH"/csv_to_stream_stats \
              "$EXPT" "$END_DATE" \
              > ${STREAM_STATS_PREFIX}_"$END_DATE".txt \
-             2> "$public_analyze_err"; then
+             2> "$csv_to_stream_stats_err"; then
         
         # Clean up any partial stream stats
         rm -f ${STREAM_STATS_PREFIX}_"$END_DATE".txt
@@ -120,34 +120,34 @@ get_period_intersection() {
     # 3. Build scheme schedule over the entire period
     set +o pipefail # ignore errors from missing files
     if ! cat "${period_stream_stats_files[@]}" 2> /dev/null |
-            "$STATS_REPO_PATH"/pre_confinterval \
+            "$STATS_REPO_PATH"/stream_stats_to_metadata \
             "$duration_scheme_schedule" --build-schemedays-list \
             2> "$pretty_duration_scheme_schedule"; then 
              
-        >&2 echo "Error building scheme schedule ($1); pre_confinterval exited unsuccessfully 
+        >&2 echo "Error building scheme schedule ($1); stream_stats_to_metadata exited unsuccessfully 
                   or never started (see $pretty_duration_scheme_schedule)"
         rm -f "$duration_scheme_schedule"
         exit 1
     fi
 
     # 4. Get intersection over the entire period, using scheme schedule
-    # Note: confinterval ignores a day's data if the day is not in this list 
+    # Note: stream_to_scheme_stats ignores a day's data if the day is not in this list 
     # (meaning not all schemes ran that day)
     local intx_err="$LOGS"/intersection_log.txt
 
-    if ! "$STATS_REPO_PATH"/pre_confinterval \
+    if ! "$STATS_REPO_PATH"/stream_stats_to_metadata \
             "$duration_scheme_schedule" --intersect-schemes "$schemes" \
             --intersect-out "$duration_scheme_intersection" \
             2> "$intx_err"; then
 
-        >&2 echo "Error generating scheme intersection ($1); pre_confinterval exited unsuccessfully
+        >&2 echo "Error generating scheme intersection ($1); stream_stats_to_metadata exited unsuccessfully
                   or never started (see $intx_err)" 
         rm -f "$duration_scheme_intersection" 
         exit 1
     fi
 }
 
-run_pre_confinterval() {    
+metadata() {    
     # Desired day's scheme schedule (and corresponding stderr) 
     readonly pretty_day_scheme_schedule="$LOGS"/pretty_day_scheme_schedule_"$END_DATE".txt
     # Schemes that ran on desired day
@@ -155,13 +155,13 @@ run_pre_confinterval() {
     
     # 1. Determine which schemes ran on the desired day
 
-    # pre_confinterval outputs each scheme's name as well as the days it ran
+    # stream_stats_to_metadata outputs each scheme's name as well as the days it ran
     # (Note this is dependent on the format of the output)
-    if ! "$STATS_REPO_PATH"/pre_confinterval \
+    if ! "$STATS_REPO_PATH"/stream_stats_to_metadata \
              "$desired_schemes" --build-schemedays-list \
              < ${STREAM_STATS_PREFIX}_"$END_DATE".txt 2> "$pretty_day_scheme_schedule"; then
         
-        >&2 echo "Error determining day's schemes ($END_DATE); pre_confinterval exited unsuccessfully
+        >&2 echo "Error determining day's schemes ($END_DATE); stream_stats_to_metadata exited unsuccessfully
                   or never started (see $pretty_day_scheme_schedule)"
         rm -f "$desired_schemes"
         exit 1
@@ -226,19 +226,19 @@ scheme_stats() {
         
         speeds=("all" "slow")  
         for speed in ${speeds[@]}; do
-            local confint_out=${time_period}_${speed}_scheme_stats_"$END_DATE".txt
+            local scheme_stats_out=${time_period}_${speed}_scheme_stats_"$END_DATE".txt
             local scheme_stats_err="$LOGS"/${time_period}_${speed}_scheme_stats_err_"$END_DATE".txt
 
             if ! cat "${contiguous_filenames[@]:0:$time_period_len}" |
-                "$STATS_REPO_PATH"/confinterval \
+                "$STATS_REPO_PATH"/stream_to_scheme_stats \
                 --scheme-intersection "$duration_scheme_intersection" \
                 --stream-speed "$speed" \
                 --watch-times "$LOCAL_DATA_PATH"/"$WATCH_TIMES_POSTFIX" \
-                > "$confint_out" 2> "$scheme_stats_err"; then
+                > "$scheme_stats_out" 2> "$scheme_stats_err"; then
                 
-                >&2 echo "Error generating scheme statistics ($END_DATE); confinterval exited unsuccessfully 
+                >&2 echo "Error generating scheme statistics ($END_DATE); stream_to_scheme_stats exited unsuccessfully 
                           or never started (see $scheme_stats_err)" 
-                rm -f "$confint_out"
+                rm -f "$scheme_stats_out"
                 exit 1
             fi
 
@@ -249,7 +249,7 @@ scheme_stats() {
             else local plot_title="$plot_title_prefix, $period_start_inclusive : $end_date_prefix"; fi
 
             if ! "$STATS_REPO_PATH"/plots/scheme_stats_to_plot.py \
-                --title "$plot_title" --input_data "$confint_out" --output_figure "$plot" \
+                --title "$plot_title" --input_data "$scheme_stats_out" --output_figure "$plot" \
                 2> "$scheme_stats_err"; then
                 >&2 echo "Error plotting ($END_DATE); see $scheme_stats_err" 
                 rm -f "$plot" 
