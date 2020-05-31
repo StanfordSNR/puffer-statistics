@@ -1,15 +1,15 @@
 AM_CPPFLAGS = $(CXX17_FLAGS) $(jemalloc_CFLAGS) $(jsoncpp_CFLAGS)
 AM_CXXFLAGS = $(PICKY_CXXFLAGS)
 
-bin_PROGRAMS = parser analyze confinterval pre_confinterval
+bin_PROGRAMS = influx_to_csv csv_to_stream_stats stream_to_scheme_stats stream_stats_to_metadata
 
-pre_confinterval_SOURCES = pre_confinterval.cc
+influx_to_csv_SOURCES = influx_to_csv.cc
+influx_to_csv_LDADD = $(jemalloc_LIBS) $(CRYPTO_LIBS)
 
-parser_SOURCES = parser.cc
-parser_LDADD = $(jemalloc_LIBS)
+csv_to_stream_stats_SOURCES = csv_to_stream_stats.cc
+csv_to_stream_stats_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)
 
-analyze_SOURCES = analyze.cc
-analyze_LDADD = $(jsoncpp_LIBS) $(jemalloc_LIBS)
+stream_to_scheme_stats_SOURCES = stream_to_scheme_stats.cc
+stream_to_scheme_stats_LDADD = $(jemalloc_LIBS)
 
-confinterval_SOURCES = confinterval.cc
-confinterval_LDADD = $(jemalloc_LIBS)
+stream_stats_to_metadata_SOURCES = stream_stats_to_metadata.cc

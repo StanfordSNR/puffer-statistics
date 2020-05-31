@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <getopt.h>
 #include <cassert>
+#include <set>
 #include "dateutil.hh"
 #include "confintutil.hh"
 
@@ -27,11 +28,19 @@ using namespace std::literals;
  * From stdin, parses output of analyze, which contains one line per stream summary.
  * To stdout, outputs each scheme's mean stall ratio, SSIM, and SSIM variance,
  * along with confidence intervals. 
- * Takes as arguments the file containing desired schemes and the days they intersect 
- * (from pre_confinterval --intersect-outfile), and the file containing watch times
- * (from pre_confinterval --build-watchtimes-list)
+ * Takes as mandatory arguments the file containing desired schemes and the days they intersect 
+ * (from stream_stats_to_metadata --intersect-schemes), and the name of the watch times files 
+ * (from stream_stats_to_metadata --build-watchtimes-list).
  * Stall ratio is calculated over simulated samples;
  * SSIM/SSIMvar is calculated over real samples.
+ */
+
+/* 
+ * Takes as optional argument a date range, restricting consideration to that range 
+ * even if scheme-intersection and/or input data contain additional days.
+ * That is, the set of days considered from the input data is the 
+ * intersection of scheme-intersection and date range.
+ * If no date range supplied, all days in scheme-intersection are considered.
  */
 
 size_t memcheck() {
@@ -221,9 +230,12 @@ class Statistics {
      * in seconds (analyze records ts as seconds) */
     using Day_sec = uint64_t;
 
-    /* Day_secs to be analyzed (read from input file) */
-    set<Day_sec> acceptable_days{};
+    /* Days listed in the intersection file */
+    set<Day_sec> days_from_intx{};
 
+    /* Days specified in argument to program (empty if --days not supplied) */
+    optional<pair<Day_sec, Day_sec>> days_from_arg{};
+    
     // real (non-simulated) stats 
     map<string, SchemeStats> scheme_stats{};
 
@@ -231,14 +243,25 @@ class Statistics {
      Statistics (const string & intersection_filename, const string & watch_times_filename,
                  const string & stream_speed) {
         vector<string> desired_schemes;
-        /* Read file containing desired schemes, and list of days they intersect */
+        
+        /* Read file containing desired schemes, and list of days they intersect. */
         read_intersection_file(intersection_filename, desired_schemes);
-        // Initialize scheme_stats, so parse() knows the desired schemes
+       
+        /* Initialize scheme_stats, so parse() knows the desired schemes */
         for (const string & scheme : desired_schemes) {
             scheme_stats[scheme] = SchemeStats{};
         }
+       
         /* Read file containing watch times */
         read_watch_times_file(watch_times_filename, stream_speed);
+        
+        /* Log schemes and days for convenience */
+        cerr << "Schemes:\n";
+        for (const auto & desired_scheme : desired_schemes) {
+            cerr << desired_scheme << " ";
+        }
+        cerr << "\n\nDays from scheme intersection:\n";  
+        print_intervals(days_from_intx);
     }
 
      void read_intersection_file(const string & intersection_filename, vector<string> & desired_schemes) {
@@ -262,23 +285,25 @@ class Statistics {
         Day_sec day;
         istringstream days_line(line_storage);
         while (days_line >> day) {  
-            acceptable_days.emplace(day);
+            days_from_intx.emplace(day);
         }
         intersection_file.close();
         if (intersection_file.bad()) {
             throw runtime_error("error reading " + intersection_filename);
         }
-        cerr << "Confint schemes:\n";
-        for (const auto & desired_scheme : desired_schemes) {
-            cerr << desired_scheme << " ";
-        }
-        cerr << "\nConfint days:\n";  
-        print_intervals(acceptable_days);
      }
         
      void read_watch_times_file(const string & watch_times_filename,
                                 const string & stream_speed) {
-        const string & full_watch_times_filename = stream_speed + "_" + watch_times_filename;
+        string full_watch_times_filename;
+        /* watch_times_filename may be a path, e.g ../watch_times_out.txt */
+        size_t slash_pos = watch_times_filename.rfind('/');
+        if (slash_pos != string::npos) {     
+            full_watch_times_filename = watch_times_filename.substr(0, slash_pos + 1) + 
+                                        stream_speed + "_" + watch_times_filename.substr(slash_pos + 1);
+        } else {
+            full_watch_times_filename = stream_speed + "_" + watch_times_filename;
+        }
         ifstream watch_times_file{full_watch_times_filename};
         if (not watch_times_file.is_open()) {
             throw runtime_error( "can't open " + full_watch_times_filename);
@@ -301,11 +326,18 @@ class Statistics {
         random_shuffle(watch_times.begin(), watch_times.end());
      }
     
-    /* Indicates whether ts is one of the acceptable days read
-     * from the input file */
+    /* Indicates whether ts belongs to an "acceptable" day, 
+     * i.e. a day listed in the intersection file
+     * and in INCLUSIVE range specified by the --days argument (if supplied) */
     bool ts_is_acceptable(uint64_t ts) {
         Day_sec day = ts2Day_sec(ts);
-        return acceptable_days.count(day);
+        bool in_arg_range = true;
+        if (days_from_arg) {  // --days argument was supplied
+            in_arg_range = day >= days_from_arg.value().first and 
+                           day <= days_from_arg.value().second;
+        }
+        
+        return days_from_intx.count(day) and in_arg_range;
     }
     
     /* Populate SchemeStats with per-scheme watch/stall/ssim, 
@@ -347,14 +379,14 @@ class Statistics {
                                     + to_string(N_STREAM_STATS) + ": " + line_storage);
             }
 
-            const auto & [timestamp, goodbad, fulltrunc, badreason, scheme, ip, os, channelchange, init_id,
+            const auto & [timestamp, goodbad, fulltrunc, badreason, scheme, 
                   extent, usedpct, mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation_db,
                   startup_delay, time_after_startup,
                   time_stalled]
                       = tie(fields[0], fields[1], fields[2], fields[3],
                               fields[4], fields[5], fields[6], fields[7],
                               fields[8], fields[9], fields[10], fields[11],
-                              fields[12], fields[13], fields[14], fields[15], fields[16], fields[17]);
+                              fields[12], fields[13]);
 
             split_on_char(timestamp, '=', scratch);
             if (scratch[0] != "ts"sv) {
@@ -441,9 +473,58 @@ class Statistics {
                 the_scheme->add_sample(watch_time, stall_time);
                 if ( mean_ssim_val >= 0 ) { the_scheme->add_ssim_sample(watch_time, mean_ssim_val); }
                 // SSIM variation = 0 over a whole stream is questionable
-                if ( ssim_variation_db_val > 0 and ssim_variation_db_val <= 10000 ) { the_scheme->add_ssim_variation_sample(ssim_variation_db_val); }
+                if ( ssim_variation_db_val > 0 and ssim_variation_db_val <= 10000 ) { 
+                    the_scheme->add_ssim_variation_sample(ssim_variation_db_val); 
+                }
             }
         }   // end while
+    }
+
+    /* Draw from aggregate over the pair of neighbor bins nhops away from the simulated watch time on each side
+     * (e.g. the direct left and right bins, if nhops == 1). */
+    static optional<double> draw_from_neighbor_bins(double simulated_watch_time, unsigned nhops,
+                                                    default_random_engine & prng,
+                                                    const SchemeStats & /* real */ scheme ) {
+        
+        unsigned int simulated_watch_time_binned = SchemeStats::watch_time_bin(simulated_watch_time);
+       
+        if (nhops > MAX_BIN - MIN_BIN) {
+            throw logic_error("Attempted to draw from pair of bins " + to_string(nhops) + " away from bin " +
+                              to_string(simulated_watch_time_binned) + 
+                              ". Valid bins (inclusive): " + to_string(MIN_BIN) + ":" + to_string(MAX_BIN));
+        }
+        
+        // unused if neighbor is out of range, since num_samples will be 0 
+        unsigned int left_neighbor = simulated_watch_time_binned - nhops;    
+        unsigned int right_neighbor = simulated_watch_time_binned + nhops;
+        const size_t left_num_stall_ratio_samples = simulated_watch_time_binned < MIN_BIN + nhops ? 
+                                                    0 :
+                                                    scheme.binned_stall_ratios.at(left_neighbor).size();
+        const size_t right_num_stall_ratio_samples = simulated_watch_time_binned > MAX_BIN - nhops ?
+                                                    0 :
+                                                    scheme.binned_stall_ratios.at(right_neighbor).size();
+        
+        if (left_num_stall_ratio_samples == 0 && right_num_stall_ratio_samples == 0) {
+            /* Both neighbors empty. Do not throw -- caller may repeat with a larger nhops. */
+            return {};
+        }
+
+        uniform_int_distribution<> agg_possible_stall_ratio_index(0, left_num_stall_ratio_samples + 
+                                                                     right_num_stall_ratio_samples - 1); 
+        const unsigned agg_stall_ratio_index = agg_possible_stall_ratio_index(prng);
+        unsigned stall_ratio_index, selected_neighbor;   // stall_ratio_index: relative to nsamples in chosen bin
+        
+        if (agg_stall_ratio_index >= left_num_stall_ratio_samples) {    // right bin
+            selected_neighbor = right_neighbor;
+            stall_ratio_index = agg_stall_ratio_index - left_num_stall_ratio_samples;
+        } else {                                                        // left bin
+            selected_neighbor = left_neighbor;
+            stall_ratio_index = agg_stall_ratio_index;
+        }
+        const double simulated_stall_time = simulated_watch_time * 
+            scheme.binned_stall_ratios.at(selected_neighbor).at(stall_ratio_index);
+        
+        return simulated_stall_time;
     }
 
     /* Simulate watch and stall time: 
@@ -461,6 +542,7 @@ class Statistics {
 
         /* step 2: draw a stall ratio for the scheme from a similar observed watch time */
         unsigned int simulated_watch_time_binned = SchemeStats::watch_time_bin(simulated_watch_time);
+        
         size_t num_stall_ratio_samples = scheme.binned_stall_ratios.at(simulated_watch_time_binned).size();
 
         if (num_stall_ratio_samples > 0) {  
@@ -468,34 +550,20 @@ class Statistics {
             // draw stall ratio from that bin
             uniform_int_distribution<> possible_stall_ratio_index(0, num_stall_ratio_samples - 1);
             // multiply stall ratio by un-binned simulated watch time, since stall ratio uses un-binned real watch time
-            const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(possible_stall_ratio_index(prng));
+            const double simulated_stall_time = simulated_watch_time * 
+                scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(possible_stall_ratio_index(prng));
 
             return {simulated_watch_time, simulated_stall_time};
         } else {
-            /* If simulated bin is empty, draw from aggregate over left and right bins; throw if both empty */
-            const size_t left_num_stall_ratio_samples = simulated_watch_time_binned > MIN_BIN ? 
-                                                        scheme.binned_stall_ratios.at(simulated_watch_time_binned - 1).size() 
-                                                        : 0;
-            const size_t right_num_stall_ratio_samples = simulated_watch_time_binned < MAX_BIN ? 
-                                                        scheme.binned_stall_ratios.at(simulated_watch_time_binned + 1).size() 
-                                                        : 0;
-            if (left_num_stall_ratio_samples == 0 && right_num_stall_ratio_samples == 0) {
-                throw runtime_error("no nonempty bins from which to draw stall_ratio");
+            unsigned nhops = 1; 
+            optional<double> simulated_stall_time;
+            while (not (simulated_stall_time = draw_from_neighbor_bins(simulated_watch_time, nhops++, prng, scheme))) {
+                /* Draw from aggregate over the pair of bins one hop away, two hops, etc until finding a non-empty bin.
+                 * Should always terminate, since at least one bin in the distribution should be non-empty 
+                 * (but draw_from_neighbor_bins checks just in case) */
             }
 
-            uniform_int_distribution<> agg_possible_stall_ratio_index(0, left_num_stall_ratio_samples + right_num_stall_ratio_samples - 1); 
-            const unsigned agg_stall_ratio_index = agg_possible_stall_ratio_index(prng);
-            unsigned stall_ratio_index;   // index relative to nsamples in chosen bin
-            if (agg_stall_ratio_index >= left_num_stall_ratio_samples) {    // right bin
-                simulated_watch_time_binned++;
-                stall_ratio_index = agg_stall_ratio_index - left_num_stall_ratio_samples;
-            } else {                                                        // left bin
-                simulated_watch_time_binned--; 
-                stall_ratio_index = agg_stall_ratio_index;
-            }
-            const double simulated_stall_time = simulated_watch_time * scheme.binned_stall_ratios.at(simulated_watch_time_binned).at(stall_ratio_index);
-
-            return {simulated_watch_time, simulated_stall_time};
+            return {simulated_watch_time, simulated_stall_time.value()};
         }
     }
 
@@ -544,7 +612,9 @@ class Statistics {
 
         void print_samplesize() const {
             cout << fixed << setprecision(3);
-            cout << "#" << _name << " considered " << _scheme_sample.samples << " streams, stall/watch hours: " << _scheme_sample.total_stall_time / 3600.0 << "/" << _scheme_sample.total_watch_time / 3600.0 << "\n";
+            cout << "#" << _name << " considered " << _scheme_sample.samples << " streams, stall/watch hours: " 
+                 << _scheme_sample.total_stall_time / 3600.0 << "/" << _scheme_sample.total_watch_time / 3600.0 
+                 << "\n";
         }
 
         void print_summary() {
@@ -567,7 +637,7 @@ class Statistics {
         default_random_engine prng(rd());
 
         // initialize with real stats, from which to sample
-        constexpr unsigned int iteration_count = 10000;
+        constexpr unsigned int iteration_count = 10000; 
         vector<Realizations> realizations;
         for (const auto & [desired_scheme, desired_scheme_stats] : scheme_stats) {
             realizations.emplace_back(Realizations{desired_scheme, desired_scheme_stats});
@@ -595,8 +665,8 @@ class Statistics {
     }
 };
 
-void confint_main(const string & intersection_filename, const string & watch_times_filename,
-                  const string & stream_speed) {
+void stream_to_scheme_stats_main(const string & intersection_filename, const string & watch_times_filename,
+                                 const string & stream_speed) {
     Statistics stats {intersection_filename, watch_times_filename, stream_speed};
     stats.parse_stdin(stream_speed);
     stats.do_point_estimate(); 
@@ -607,10 +677,10 @@ void print_usage(const string & program) {
          << " --scheme-intersection <intersection_filename>"
             " --stream-speed <stream_speed>"
             " --watch-times <watch_times_filename_postfix>\n"
-            "intersection_filename: Output of pre_confinterval --intersect-schemes --intersect-outfile, "
+            "intersection_filename: Output of stream_stats_to_metadata --intersect-schemes --intersect-outfile, "
             "containing desired schemes and the days they intersect.\n"
             "stream-speed: slow or all\n"
-            "watch_times_filename_postfix: Output of pre_confinterval --build-watch_times-list, "
+            "watch_times_filename_postfix: Output of stream_stats_to_metadata --build-watch_times-list, "
             "containing watch times (specified stream_speed will be prepended).\n";
 }
 
@@ -625,9 +695,9 @@ int main(int argc, char *argv[]) {
             {"watch-times", required_argument, nullptr, 'w'},
             {nullptr, 0, nullptr, 0}
         };
-        string intersection_filename, watch_times_filename;
-        string stream_speed;
-
+        string intersection_filename, watch_times_filename,
+               stream_speed;
+        
         while (true) {
             const int opt = getopt_long(argc, argv, "i:s:w:", opts, nullptr);
             if (opt == -1) break;
@@ -637,6 +707,11 @@ int main(int argc, char *argv[]) {
                     break;
                 case 's':
                     stream_speed = optarg;
+                    if (stream_speed != "slow" and stream_speed != "all") {
+                        cerr << "Error: Stream speed must be \"slow\" or \"all\"\n\n";
+                        print_usage(argv[0]);
+                        return EXIT_FAILURE;
+                    }
                     break;
                 case 'w':
                     watch_times_filename = optarg;
@@ -651,14 +726,13 @@ int main(int argc, char *argv[]) {
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
-        if (intersection_filename.empty() or watch_times_filename.empty() or 
-                (stream_speed != "slow" and stream_speed != "all")) {
-            cerr << "Error: Scheme days file, watch time file, and stream speed (slow or all) are required\n";
+        if (intersection_filename.empty() or watch_times_filename.empty() or stream_speed.empty()) {
+            cerr << "Error: Scheme days file, watch time file, and stream speed are required\n\n";
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
 
-        confint_main(intersection_filename, watch_times_filename, stream_speed); 
+        stream_to_scheme_stats_main(intersection_filename, watch_times_filename, stream_speed); 
         
     } catch (const exception & e) {
         cerr << e.what() << "\n";
@@ -667,3 +741,4 @@ int main(int argc, char *argv[]) {
 
     return EXIT_SUCCESS;
 }
+

@@ -1,10 +1,10 @@
-/* Utilities useful for (pre)confinterval */
+/* Utilities useful for confintervals and associated metadata */
 
 #ifndef CONFINTUTIL_HH
 #define CONFINTUTIL_HH
 
 // Number of statistics fields output per stream 
-constexpr static unsigned int N_STREAM_STATS = 18;
+constexpr static unsigned int N_STREAM_STATS = 14;
 
 // Max length of stream statistics line 
 constexpr static unsigned int MAX_LINE_LEN = 500;

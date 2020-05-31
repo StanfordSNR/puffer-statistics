@@ -715,6 +715,16 @@ class Parser {
                     throw;
                 }
             }
+            // Count total events
+            /*
+            size_t n_total_events = 0;
+            for (uint8_t server = 0; server < client_buffer.size(); server++) {
+                for (uint8_t channel = 0; channel < Channel::COUNT; channel++) {
+                    n_total_events += client_buffer[server][channel].size();
+                }
+            }
+            cerr << "n_total_events " << n_total_events << endl;
+            */
         }
 
         /* Group Events by stream (key is {init_id, expt_id, user_id, server, channel}) 
@@ -740,6 +750,7 @@ class Parser {
                     }
                 }
             }
+            // cerr << "n_total_streams " << sessions.size() << endl;  
         }
 
         /* Map each SysInfo to a stream or session (in the case of older data, when sysinfo was only supplied on load).
@@ -890,7 +901,7 @@ class Parser {
                  * After 11/27: Each data point is recorded with first_init_id and init_id.
                  * Also, sysinfo is supplied on both load and channel change. */
                 auto sysinfo_it = sysinfos.end();
-                int channel_changes = -1;
+                // int channel_changes = -1;
                 // use first event to check if stream uses first_init_id
                 optional<uint32_t> first_init_id = events.front().second->first_init_id;
                 if (first_init_id) {
@@ -901,7 +912,7 @@ class Parser {
                     sysinfo_it = sysinfos.find({get<0>(key),
                             get<1>(key),
                             get<2>(key)});
-                    channel_changes = get<0>(key) - first_init_id.value();
+                    // channel_changes = get<0>(key) - first_init_id.value();
                 } else {
                     for ( unsigned int decrement = 0; decrement < 1024; decrement++ ) {
                         sysinfo_it = sysinfos.find({get<0>(key) - decrement,
@@ -910,7 +921,7 @@ class Parser {
                         if (sysinfo_it == sysinfos.end()) {
                             // loop again
                         } else {
-                            channel_changes = decrement;
+                            // channel_changes = decrement;
                             break;
                         }
                     }
@@ -946,15 +957,13 @@ class Parser {
                 cout << fixed;
 
                 // ts from influx export include nanoseconds -- truncate to seconds
+                // cout all non-private values for comparison against 
+                // public version 
                 cout << "ts=" << (summary.base_time / 1000000000) 
                      << " valid=" << (summary.valid ? "good" : "bad") 
                      << " full_extent=" << (summary.full_extent ? "full" : "trunc" ) 
                      << " bad_reason=" << summary.bad_reason
                      << " scheme=" << summary.scheme 
-                     << " ip=" << inet_ntoa({sysinfo.ip.value()})
-                     << " os=" << ostable.reverse_map(sysinfo.os.value())
-                     << " channel_changes=" << channel_changes 
-                     << " init=" << summary.init_id 
                      << " extent=" << summary.time_extent
                      << " used=" << 100 * summary.time_at_last_play / summary.time_extent << "%"
                      << " mean_ssim=" << mean_ssim
@@ -979,12 +988,12 @@ class Parser {
                         good_and_full++;
                     }
                 }
-            }
+            }   // end for
 
             // mark summary lines with # so confinterval will ignore them
             cout << "#num_streams=" << streams.size() << " good=" << good_streams << " good_and_full=" << good_and_full << " missing_sysinfo=" << missing_sysinfo << " missing_video_stats=" << missing_video_stats << " had_stall=" << had_stall 
                  << " overall_chunks=" << overall_chunks << " overall_high_ssim_chunks=" << overall_high_ssim_chunks 
-                 << " overall_ssim_1_chunks=" << overall_ssim_1_chunks << " out_of_range_ts=" << n_bad_ts << "\n";
+                 << " overall_ssim_1_chunks=" << overall_ssim_1_chunks << "\n";
             cout << "#total_extent=" << total_extent / 3600.0 << " total_time_after_startup=" << total_time_after_startup / 3600.0 << " total_stall_time=" << total_stall_time / 3600.0 << "\n";
         }
 

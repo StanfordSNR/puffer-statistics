@@ -167,14 +167,14 @@ class SchemeDays {
                                     + to_string(N_STREAM_STATS) + ": " + line_storage);
             }
 
-            const auto & [timestamp, goodbad, fulltrunc, badreason, scheme, ip, os, channelchange, init_id,
+            const auto & [timestamp, goodbad, fulltrunc, badreason, scheme, 
                   extent, usedpct, mean_ssim, mean_delivery_rate, average_bitrate, ssim_variation_db,
                   startup_delay, time_after_startup,
                   time_stalled]
                       = tie(fields[0], fields[1], fields[2], fields[3],
                               fields[4], fields[5], fields[6], fields[7],
                               fields[8], fields[9], fields[10], fields[11],
-                              fields[12], fields[13], fields[14], fields[15], fields[16], fields[17]);
+                              fields[12], fields[13]);
 
             if (action == SCHEMEDAYS_LIST) {
                 /* Record this stream's day for the corresponding scheme, 
@@ -317,7 +317,7 @@ class SchemeDays {
     /* Human-readable summary of days each scheme ran 
      * (output file is not particularly fun to read). */
     void print_schemedays_summary() {
-        cerr << "In-memory scheme_days:\n";
+        cerr << "Scheme schedule:\n";
         for (const auto & [scheme, days] : scheme_days) {
             cerr << "\n" << scheme << "\n"; 
             print_intervals(days);
@@ -389,7 +389,7 @@ class SchemeDays {
     }
 };
 
-void scheme_days_main(const string & list_filename, const string & desired_schemes,
+void stream_stats_to_metadata_main(const string & list_filename, const string & desired_schemes,
                       const string & intersection_filename, Action action) {
     // Populates schemedays/watchtimes map from input data or file
     SchemeDays scheme_days {list_filename, action};
@@ -491,7 +491,7 @@ int main(int argc, char *argv[]) {
         }
 
         string list_filename = argv[optind];     
-        scheme_days_main(list_filename, desired_schemes, intersection_filename, action);
+        stream_stats_to_metadata_main(list_filename, desired_schemes, intersection_filename, action);
 
     } catch (const exception & e) {
         cerr << e.what() << "\n";

@@ -1,8 +1,11 @@
 #!/bin/bash
 # For provided date ranges, grabs data from gs and runs analyze 
 # Assumed to already be in desired output directory (e.g. called by parallel wrapper)
+# Diffs results against the submission (submission_anon_analyze is the version of
+# analyze used in the submission, with non-anonymous output suppressed for comparison)
 set -e
 
+# For now, private and public in one script
 # Export and analyze a single day
 single_day_stats() { 
     first_day=$1
@@ -18,14 +21,47 @@ single_day_stats() {
     pushd ${date}
     for f in *.tar.gz; do tar xf "$f"; done
     popd
+    # influx_inspect export -datadir $date -waldir /dev/null -out "influx_out.txt" # useful for test
     # export to influxDB line protocol file
     # pass top-level date to influx_inspect
     # echo "exporting and analyzing"
+    
+    # Influx export => anonymized csv 
+    #echo "starting private analyze" 
     influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
-        ~/puffer-statistics/analyze ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_stats.txt 2> ${date}_err.txt 
-    # clean up data, leave stats/err.txt
-    rm -rf ${date}
+        ~/puffer-statistics/private_analyze $date 2> ${date}_private_analyze_err.txt 
+    #echo "finished private analyze for date " $date
+    
+    # Anonymized csv => stream-by-stream stats
+    cat client_buffer_${date}.csv | ~/puffer-statistics/public_analyze \
+        ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_public_analyze_stats.txt \
+        2> ${date}_public_analyze_err.txt
+    #echo "finished public analyze"
+    
+    # Run submission version for comparison
+    #echo "starting submission analyze"
+    influx_inspect export -datadir $date -waldir /dev/null -out /dev/fd/3 3>&1 1>/dev/null | \
+        ~/puffer-statistics/submission_anon_analyze \
+        ~/puffer-statistics/experiments/puffer.expt_feb4_2020 $date > ${date}_submission_anon_stats.txt \
+        2> ${date}_submission_anon_err.txt
+   
+    # clean up data, leave stats/err.txt, csvs
+    rm -rf ${date} 
     rm ${date}.tar.gz
+    # rm *_${date}.csv
+
+    # diff submission and new stats -- ignore tiny differences from float addition order
+    # sort, since public analyze outputs in different order
+    stats=(${date}_submission_anon_stats.txt ${date}_public_analyze_stats.txt)
+    for stats in "${stats[@]}"; do
+        sort -o $stats $stats
+        # set up for numdiff
+        # sed -i 's/=/= /g' $stats
+        # sed -i 's/%//g' $stats
+    done
+    # numdiff doesn't work with tail
+    # numdiff -r 0.005 ${date}_submission_anon_stats.txt ${date}_public_analyze_stats.txt >> diffs.txt
+    diff <(tail -n +3 ${date}_submission_anon_stats.txt) <(tail -n +3 ${date}_public_analyze_stats.txt) >> diffs.txt
 }
 
 if [ "$#" -lt 1 ]; then
