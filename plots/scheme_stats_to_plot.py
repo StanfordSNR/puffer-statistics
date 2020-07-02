@@ -40,6 +40,9 @@ def plot_data(data, output_figure, title):
     ax.set_ylabel('Average SSIM (dB)')
 
     for name in data:
+        if name == 'nstreams' or name == 'nwatch_hours':
+            continue
+
         x = data[name]['stall'][2]
         y = data[name]['ssim'][2]
         
@@ -57,7 +60,8 @@ def plot_data(data, output_figure, title):
         #            xytext=(4,5), textcoords='offset pixels')
         ax.legend()
 
-    plt.title(title)
+    subtitle = '{} streams, {:.0f} stream-hours'.format(data['nstreams'], data['nwatch_hours'])
+    plt.title(title + '\n(' + subtitle + ')' if title else subtitle)
     ax.invert_xaxis()
 
     # Hide the right and top spines
@@ -72,9 +76,16 @@ def parse_data(input_data_path):
     data = {}
 
     with open(input_data_path) as fh:
+        nstreams = 0
+        nwatch_hours = 0
+
         for line in fh:
             if line[0] == '#':
+                items = line.split()
+                nstreams += int(items[2])
+                nwatch_hours += float(items[-1].split('/')[1])
                 continue
+            
             line = line.replace(',', '').replace(';', '').replace('%', '')
 
             items = line.split()
@@ -87,6 +98,9 @@ def parse_data(input_data_path):
 
             # ssim_low, ssim_high, ssim_mean
             data[name]['ssim'] = [float(x) for x in items[13:19:2]]
+
+    data['nstreams'] = nstreams
+    data['nwatch_hours'] = nwatch_hours
 
     return data
 
