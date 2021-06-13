@@ -49,9 +49,9 @@ rm -r "$END_DATE"
 rm "$END_DATE".tar.gz
 
 # Upload CSVs, zipped (will automatically unzip after download)
-if ! /snap/bin/gsutil -q -m cp -Z *.csv "$DATA_BUCKET"; then
+if ! /snap/bin/gsutil -q -m cp -Z *$END_DATE.csv "$DATA_BUCKET"; then
     # Clean up any partially uploaded file (ignore exit status)
-    /snap/bin/gsutil -q rm "$DATA_BUCKET"*.csv 2> /dev/null || true
+    /snap/bin/gsutil -q rm "$DATA_BUCKET"*$END_DATE.csv 2> /dev/null || true
     >&2 echo "Error uploading CSVs ($END_DATE)"
     exit 1 
 fi
