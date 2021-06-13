@@ -331,13 +331,13 @@ private:
      * has first_init_id, init_id, user_id, expt_id as optional members */
     template <typename MeasurementArray>
     void dump_private_measurement(const MeasurementArray & meas_arr, const string & meas_name) {
-        const string & dump_filename = meas_name + "_" + date_str + ".csv";
+        const string & dump_filename = "buf_" + meas_name + "_" + date_str + ".csv";
         ofstream dump_file{dump_filename};
         if (not dump_file.is_open()) {
             throw runtime_error( "can't open " + dump_filename);
         }
         
-        dump_file << "time (ns GMT),session_id,index,expt_id,channel,";
+        //dump_file << "time (ns GMT),session_id,index,expt_id,channel,";
         bool wrote_header = false; 
 
         // Write all datapoints
@@ -383,11 +383,11 @@ private:
                     const string & anon_values = meas_name == "video_sent" ? 
                         datapoint.anon_values(formats) : datapoint.anon_values();
                 
-                    dump_file << ts << "," 
+                    dump_file /* << ts << "," 
                               << public_id.session_id << ","
                               << public_id.index << ","
                               << *datapoint.expt_id << ","
-                              << channels.reverse_map(channel_id) << "," 
+                              << channels.reverse_map(channel_id) << "," */
                               << anon_values << "\n";
                 }
             }
@@ -623,11 +623,13 @@ private:
      * 2) Define struct 
      * 3) Call dump_*_measurement() */
     void dump_all_measurements() {
-        dump_private_measurement(client_buffer, VAR_NAME(client_buffer)); 
+        // dump_private_measurement(client_buffer, VAR_NAME(client_buffer));  TODO
         dump_private_measurement(video_sent, VAR_NAME(video_sent));
+        /*
         dump_private_measurement(video_acked, VAR_NAME(video_acked));
         dump_public_measurement(video_size, VAR_NAME(video_size));
         dump_public_measurement(ssim, VAR_NAME(ssim));
+        */
     }
 
     /* Parse lines of influxDB export, for lines measuring 
@@ -722,6 +724,7 @@ private:
                 } else if ( measurement == "client_sysinfo"sv ) {
                     // some records in 2019-09-08T11_2019-09-09T11 have a crazy server_id and
                     // seemingly the older record structure (with user= as part of the tags)
+                    /* TODO
                     optional<uint64_t> server_id;
                     try {
                         server_id.emplace(get_server_id(measurement_tag_set_fields));
@@ -734,11 +737,13 @@ private:
                     if (server_id.has_value()) {
                         client_sysinfo[server_id.value()][timestamp].insert_unique(key, value, usernames, browsers, ostable);
                     }
+                    */
                 } else if ( measurement == "decoder_info"sv ) {
                     // skip
                 } else if ( measurement == "server_info"sv ) {
                     // skip
                 } else if ( measurement == "ssim"sv ) {
+                    /* TODO
                     const uint8_t format_id = get_dynamic_tag_id(ssim,
                                                                  measurement_tag_set_fields, 
                                                                  "format"sv);
@@ -746,12 +751,15 @@ private:
                                                                   measurement_tag_set_fields, 
                                                                   "channel"sv);
                     ssim.at(format_id).at(channel_id)[timestamp].insert_unique(key, value);
+                    */
                 } else if ( measurement == "video_acked"sv ) {
+                    /* TODO
                     const uint64_t server_id = get_server_id(measurement_tag_set_fields);
                     const uint8_t channel_id = get_dynamic_tag_id(video_acked.at(server_id), 
                                                                   measurement_tag_set_fields, 
                                                                   "channel"sv);
                     video_acked[server_id].at(channel_id)[timestamp].insert_unique(key, value, usernames);
+                    */
                 } else if ( measurement == "video_sent"sv ) {
                     const uint64_t server_id = get_server_id(measurement_tag_set_fields);
                     const uint8_t channel_id = get_dynamic_tag_id(video_sent.at(server_id), 
@@ -759,6 +767,7 @@ private:
                                                                   "channel"sv);
                     video_sent[server_id].at(channel_id)[timestamp].insert_unique(key, value, usernames, formats);
                 } else if ( measurement == "video_size"sv ) {
+                    /* TODO
                     const uint8_t format_id = get_dynamic_tag_id(video_size,
                                                                  measurement_tag_set_fields, 
                                                                  "format"sv);
@@ -766,6 +775,7 @@ private:
                                                                   measurement_tag_set_fields, 
                                                                   "channel"sv);
                     video_size.at(format_id).at(channel_id)[timestamp].insert_unique(key, value);
+                    */
                 } else {
                     throw runtime_error( "Can't parse: " + string(line) );
                 }
