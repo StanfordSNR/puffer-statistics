@@ -222,8 +222,8 @@ class Parser {
                          line >> delivery_rate) ) {
                     throw runtime_error("error reading from " + video_sent_filename);
                 }
-                // leave private fields blank
-                VideoSent video_sent{ssim_index = ssim_index, delivery_rate, expt_id, nullopt, nullopt, nullopt,
+                // leave private fields and buf/cum_rebuf blank
+                VideoSent video_sent{ssim_index, delivery_rate, expt_id, nullopt, nullopt, nullopt,
                     size, formats.forward_map_vivify(format), cwnd, in_flight, min_rtt, rtt, video_ts};
 
                 // Add chunk to list of chunks corresponding to its stream 

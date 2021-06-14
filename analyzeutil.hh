@@ -360,10 +360,11 @@ struct VideoSent {
     optional<uint32_t> delivery_rate{}, expt_id{}, init_id{}, first_init_id{}, user_id{}, size{},
     format{}, cwnd{}, in_flight{}, min_rtt{}, rtt{};
     optional<uint64_t> video_ts{};
+    optional<float> buffer{}, cum_rebuf{};
 
     // Comma-separated anonymous keys and values (to be dumped).
     static string anon_keys() { 
-        return VAR_NAME(video_ts) + string(",") + 
+        return VAR_NAME(video_ts) + string(",") +
                VAR_NAME(format) + "," +
                VAR_NAME(size) + "," +
                VAR_NAME(ssim_index) + "," +
@@ -371,7 +372,9 @@ struct VideoSent {
                VAR_NAME(in_flight) + "," +
                VAR_NAME(min_rtt) + "," +
                VAR_NAME(rtt) + "," +
-               VAR_NAME(delivery_rate);
+               VAR_NAME(delivery_rate) + "," +
+               VAR_NAME(buffer) + "," +
+               VAR_NAME(cum_rebuf); 
     }
     // Makes templatizing easier, and enforces that dump() calls the correct function
     string anon_values() const { 
@@ -388,7 +391,9 @@ struct VideoSent {
                << in_flight.value() << ","
                << min_rtt.value() << ","
                << rtt.value() << ","
-               << delivery_rate.value();
+               << delivery_rate.value() << ","
+               << buffer.value() << ","
+               << cum_rebuf.value();
         return values.str();
     }
 
@@ -396,7 +401,8 @@ struct VideoSent {
 
     bool complete() const {
         return ssim_index and delivery_rate and expt_id and init_id and user_id and size and
-               video_ts and cwnd and in_flight and min_rtt and rtt and format;
+               video_ts and cwnd and in_flight and min_rtt and rtt and format and
+               buffer and cum_rebuf;
     }
 
     bool operator==(const VideoSent & other) const {
@@ -412,7 +418,9 @@ struct VideoSent {
             and in_flight == other.in_flight
             and min_rtt == other.min_rtt
             and rtt == other.rtt
-            and format == other.format;
+            and format == other.format
+            and buffer == other.buffer
+            and cum_rebuf == other.cum_rebuf;
     }
 
     bool operator!=(const VideoSent & other) const { return not operator==(other); }
@@ -466,8 +474,10 @@ struct VideoSent {
             set_unique( rtt, influx_integer<uint32_t>( value ) );
         } else if (key == "format"sv) {
             set_unique( format, formats.forward_map_vivify(string(value.substr(1,value.size()-2))) );
-        } else if (key == "buffer"sv or key == "cum_rebuffer"sv) {
-            // ignore
+        } else if (key == "buffer"sv) {
+            set_unique( buffer, to_float(value) );
+        } else if (key == "cum_rebuffer"sv) {
+            set_unique( cum_rebuf, to_float(value) );
         } else {
             throw runtime_error( "unknown key: " + string(key) );
         }
@@ -488,21 +498,28 @@ std::ostream& operator<< (std::ostream& out, const VideoSent& s) {
         << ", min_rtt=" << s.min_rtt.value_or(-1)
         << ", rtt=" << s.rtt.value_or(-1)
         << ", format=" << s.format.value_or(-1)
+        << ", buffer=" << s.buffer.value_or(-1)
+        << ", cum_rebuf=" << s.cum_rebuf.value_or(-1)
         << "\n";
 }
 
 struct VideoAcked {
     optional<uint32_t> expt_id{}, init_id{}, first_init_id{}, user_id{};
     optional<uint64_t> video_ts{};
+    optional<float> buffer{}, cum_rebuf{};
    
     // Comma-separated anonymous keys and values (to be dumped)
     static string anon_keys() { 
-        return VAR_NAME(video_ts);
+        return VAR_NAME(video_ts) + string(",") +
+               VAR_NAME(buffer) + "," +
+               VAR_NAME(cum_rebuf);
     }
     // Should only be called on complete datapoints
     string anon_values() const { 
         ostringstream values;
-        values << video_ts.value();
+        values << video_ts.value() << ","
+               << buffer.value() << ","
+               << cum_rebuf.value();
         return values.str();
     }
     // Makes templatizing easier, and enforces that dump() calls the correct function
@@ -513,7 +530,7 @@ struct VideoAcked {
     bool bad = false;
 
     bool complete() const {
-        return expt_id and init_id and user_id and video_ts; 
+        return expt_id and init_id and user_id and video_ts and buffer and cum_rebuf;
     }
 
     bool operator==(const VideoAcked & other) const {
@@ -521,7 +538,9 @@ struct VideoAcked {
             and init_id == other.init_id
             and user_id == other.user_id
             and first_init_id == other.first_init_id
-            and video_ts == other.video_ts;
+            and video_ts == other.video_ts
+            and buffer == other.buffer
+            and cum_rebuf == other.cum_rebuf;
     }
 
     bool operator!=(const VideoAcked & other) const { return not operator==(other); }
@@ -537,7 +556,7 @@ struct VideoAcked {
                         cerr << "error trying to set contradictory videoacked value " << value <<
                                 "(old value " << field.value() << ")\n";
                         cerr << "Contradictory videoacked:\n";
-                        cerr << *this; 
+                        cerr << *this;
                     }
                     // throw runtime_error( "contradictory values: " + to_string(field.value()) + " vs. " + to_string(value) );
                 }
@@ -559,8 +578,12 @@ struct VideoAcked {
             set_unique( user_id, usernames.forward_map_vivify(string(value.substr(1,value.size()-2))) );
         } else if (key == "video_ts"sv) {
             set_unique( video_ts, influx_integer<uint64_t>( value ) );
-        } else if (key == "buffer"sv or key == "cum_rebuffer"sv or key == "ssim_index"sv) {
-            // ignore
+        } else if (key == "ssim_index"sv) {
+            // ignore (already recorded in corresponding video_sent)
+        } else if (key == "buffer"sv) {
+            set_unique( buffer, to_float(value) );
+        } else if (key == "cum_rebuffer"sv) {
+            set_unique( cum_rebuf, to_float(value) );
         } else {
             throw runtime_error( "unknown key: " + string(key) );
         }
@@ -573,6 +596,8 @@ std::ostream& operator<< (std::ostream& out, const VideoAcked& s) {
         << ", user_id=" << s.user_id.value_or(-1)
         << ", first_init_id=" << s.first_init_id.value_or(-1)
         << ", video_ts=" << s.video_ts.value_or(-1)
+        << ", buffer=" << s.buffer.value_or(-1)
+        << ", cum_rebuf=" << s.cum_rebuf.value_or(-1)
         << "\n";
 }
 
