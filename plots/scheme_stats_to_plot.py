@@ -18,7 +18,8 @@ common_schemes = {
      'puffer_ttp_20190202/bbr': ['Fugu-Feb', 'tab:orange'], 
      'puffer_ttp_20190302/bbr': ['Fugu-Mar', 'tab:olive'],
      'puffer_ttp_20190402/bbr': ['Fugu-Apr', 'tab:cyan'], 
-     'puffer_ttp_20190502/bbr': ['Fugu-May', 'tab:gray']
+     'puffer_ttp_20190502/bbr': ['Fugu-May', 'tab:gray'],
+     'fugu_variant_cl/bbr': ['Memento', '#0f6c44'],
 }
 
 # Keep name => color mapping consistent across experiments and runs.
