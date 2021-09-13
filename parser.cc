@@ -27,7 +27,7 @@ size_t memcheck() {
 	throw runtime_error(string("getrusage: ") + strerror(errno));
     }
 
-    if (usage.ru_maxrss > 12 * 1024 * 1024) {
+    if (usage.ru_maxrss > 36 * 1024 * 1024) {
 	throw runtime_error("memory usage is at " + to_string(usage.ru_maxrss) + " KiB");
     }
 
