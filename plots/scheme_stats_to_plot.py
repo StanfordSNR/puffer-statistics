@@ -20,6 +20,8 @@ common_schemes = {
      'puffer_ttp_20190402/bbr': ['Fugu-Apr', 'tab:cyan'], 
      'puffer_ttp_20190502/bbr': ['Fugu-May', 'tab:gray'],
      'fugu_variant_cl/bbr': ['Memento', '#0f6c44'],
+     'fugu_variant_cl3/bbr': ['Memento-v3a', '#bc61f5'],
+     'fugu_variant_cl4/bbr': ['Memento-v3b', '#461257'],
 }
 
 # Keep name => color mapping consistent across experiments and runs.
