@@ -22,6 +22,8 @@ common_schemes = {
      'fugu_variant_cl/bbr': ['Memento', '#0f6c44'],
      'fugu_variant_cl3/bbr': ['Memento-v3a', '#bc61f5'],
      'fugu_variant_cl4/bbr': ['Memento-v3b', '#461257'],
+     'unagi/bbr': ['Gelato', "#cf2a6a"],
+     'maguro/bbr': ['Gelato-Plume', "#b89911"],
 }
 
 # Keep name => color mapping consistent across experiments and runs.
