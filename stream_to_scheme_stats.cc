@@ -323,7 +323,9 @@ class Statistics {
             throw runtime_error("error reading " + full_watch_times_filename);
         }
         // shuffle watch times before sampling
-        random_shuffle(watch_times.begin(), watch_times.end());
+        random_device rd;
+        default_random_engine prng(rd());
+        shuffle(watch_times.begin(), watch_times.end(), prng);
      }
     
     /* Indicates whether ts belongs to an "acceptable" day, 

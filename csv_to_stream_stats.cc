@@ -374,7 +374,7 @@ class Parser {
             size_t num_ssim_var_samples = chunk_stream.size() - 1;  
             size_t num_ssim_1_chunks = 0;
 
-            for ( const auto [ts, videosent] : chunk_stream ) {
+            for ( const auto & [ts, videosent] : chunk_stream ) {
                 float raw_ssim = videosent.ssim_index.value(); // would've thrown by this point if not set
                 if (raw_ssim == 1.0) {
                     num_ssim_1_chunks++; 
