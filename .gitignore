@@ -20,6 +20,7 @@ Makefile.in
 /config.status
 /config.sub
 /configure
+/configure~
 /depcomp
 /install-sh
 /libtool
@@ -31,3 +32,7 @@ Makefile.in
 /parser
 /analyze
 /confinterval
+/influx_to_csv
+/csv_to_stream_stats
+/stream_to_scheme_stats
+/stream_stats_to_metadata
