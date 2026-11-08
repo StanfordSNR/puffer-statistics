@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <optional>
 
 using std::cerr;    using std::string;  
 

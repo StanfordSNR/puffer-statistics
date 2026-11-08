@@ -57,7 +57,7 @@ def plot_data(data, output_figure, title):
         ax.scatter(x, y, color=pretty_color, label=pretty_name)
         ax.errorbar(x, y,
             xerr=[[x - data[name]['stall'][0]], [data[name]['stall'][1] - x]],
-            yerr=[[y - data[name]['ssim'][1]], [data[name]['ssim'][0] - y]],
+            yerr=[[y - data[name]['ssim'][0]], [data[name]['ssim'][1] - y]],
             ecolor=pretty_color,
             capsize=4.0)
         # Labels are often very overlapping -- try legend

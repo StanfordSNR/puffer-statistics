@@ -7,6 +7,7 @@
 #include <iostream>
 #include <array>
 #include <tuple>
+#include <optional>
 #include <charconv>
 #include <cstring>
 #include <fstream>
